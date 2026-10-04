@@ -1,0 +1,70 @@
+{
+  "checked": "2026-10-04",
+  "licenses": [
+    {
+      "file": "whisper-MIT.txt",
+      "source": "https://raw.githubusercontent.com/openai/whisper/main/LICENSE",
+      "sha256": "b5d65a59060e68c4ff940e1eddfa6f94b2d68fdf58ed7f4dd57721c997e35e9d"
+    },
+    {
+      "file": "faster-whisper-MIT.txt",
+      "source": "https://raw.githubusercontent.com/SYSTRAN/faster-whisper/v1.2.1/LICENSE",
+      "sha256": "af6798135e729f8aa6c853936d037dfdea449734d26b8ea6a89805fca758c0d5"
+    },
+    {
+      "file": "CTranslate2-MIT.txt",
+      "source": "https://raw.githubusercontent.com/OpenNMT/CTranslate2/v4.8.2/LICENSE",
+      "sha256": "54aa79d9fe3c09e67a16dcd95b9e88676405a6ec174efda31036983cf7672ecb"
+    },
+    {
+      "file": "Silero-VAD-MIT.txt",
+      "source": "https://raw.githubusercontent.com/snakers4/silero-vad/master/LICENSE",
+      "sha256": "2e63e9a38b6e8fc0c7bc37ce174caca1862870856c6daf5697cfb785e925520b"
+    },
+    {
+      "file": "NeMo-Apache-2.0.txt",
+      "source": "https://raw.githubusercontent.com/NVIDIA/NeMo/v1.19.0/LICENSE",
+      "sha256": "43070e2d4e532684de521b885f385d0841030efa2b1a20bafb76133a5e1379c1"
+    },
+    {
+      "file": "sherpa-onnx-Apache-2.0.txt",
+      "source": "https://raw.githubusercontent.com/k2-fsa/sherpa-onnx/v1.13.8/LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "file": "SoundCard-BSD-3-Clause.txt",
+      "source": "https://raw.githubusercontent.com/bastibe/SoundCard/0.4.6/LICENSE",
+      "sha256": "0e66485305a05406776c14a6fbfa457a5335998364c4cbda8a8c6637438cd0d0"
+    },
+    {
+      "file": "React-MIT.txt",
+      "source": "https://raw.githubusercontent.com/facebook/react/v19.3.0/LICENSE",
+      "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
+    },
+    {
+      "file": "Electron-MIT.txt",
+      "source": "https://raw.githubusercontent.com/electron/electron/v44.5.1/LICENSE",
+      "sha256": "5154e165bd6c2cc0cfbcd8916498c7abab0497923bafcd5cb07673fe8480087d"
+    },
+    {
+      "file": "PyAV-BSD-3-Clause.txt",
+      "source": "https://raw.githubusercontent.com/PyAV-Org/PyAV/v16.1.0/LICENSE.txt",
+      "sha256": "76af0461ffb92e19f1c14449e95557d83a2dfaa1baf202d49e5f1d8746c0da19"
+    },
+    {
+      "file": "NumPy-BSD-3-Clause.txt",
+      "source": "https://raw.githubusercontent.com/numpy/numpy/v2.4.3/LICENSE.txt",
+      "sha256": "1be1df33863f97a7bc1c4d67980bd6c69c9a6fef0a5ee76e6ad6cb91e56e8491"
+    },
+    {
+      "file": "GPL-3.0.txt",
+      "source": "https://www.gnu.org/licenses/gpl-3.0.txt",
+      "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+    },
+    {
+      "file": "pyannote-segmentation-MIT.txt",
+      "source": "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-segmentation-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2",
+      "sha256": "14d7016ad68e7394d6e6b78d96cc2ae431c905287b89674cfdf021e79e62b8ba"
+    }
+  ]
+}
