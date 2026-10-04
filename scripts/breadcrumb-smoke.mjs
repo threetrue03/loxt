@@ -1,0 +1,51 @@
+import { _electron as electron } from 'playwright';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import { Library } from '../electron/library.cjs';
+await mkdir('test-results', { recursive: true });
+const data = await mkdtemp(path.resolve('test-results/breadcrumb-'));
+const library = new Library(path.join(data, 'library')); await library.ready;
+await library.createFolder('알고리즘');
+await library.createFolder({ name: '10월 3일', parent: '알고리즘' });
+await library.createFolder({ name: '요약본', parent: '알고리즘/10월 3일' });
+await library.createFolder({ name: '매우 긴 폴더 이름을 사용하는 자료', parent: '알고리즘/10월 3일/요약본' });
+const env = { ...process.env, SORINOTE_TEST: '1', SORINOTE_TEST_DATA: data };
+delete env.ELECTRON_RUN_AS_NODE; delete env.SORINOTE_DEV;
+const app = await electron.launch({ ...(process.argv[2] ? { executablePath: path.resolve(process.argv[2]) } : { args: ['.'] }), env });
+try {
+  const page = await app.firstWindow(); page.setDefaultTimeout(15000);
+  const errors = []; page.on('pageerror', error => errors.push(error.message));
+  await page.getByRole('heading', { name: '전체 녹음', exact: true }).waitFor();
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1440, 900));
+  async function open(name) { await page.locator('.folder-card').filter({ hasText: name }).click(); await page.getByRole('heading', { name, exact: true }).waitFor(); }
+  await open('알고리즘'); await open('10월 3일'); await open('요약본');
+  const nav = page.getByRole('navigation', { name: '폴더 경로', exact: true });
+  assert.equal(await nav.locator('[aria-current="page"]').textContent(), '요약본');
+  assert.equal(await nav.getByRole('button', { name: '요약본', exact: true }).count(), 0);
+  await nav.getByRole('button', { name: '알고리즘', exact: true }).click();
+  await page.getByRole('heading', { name: '알고리즘', exact: true }).waitFor();
+  await open('10월 3일'); await open('요약본'); await open('매우 긴 폴더 이름을 사용하는 자료');
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(860, 640));
+  await nav.getByRole('button', { name: '생략된 폴더 경로', exact: true }).waitFor();
+  assert.equal(await page.locator('.main').evaluate(element => element.scrollWidth > element.clientWidth), false);
+  await nav.getByRole('button', { name: '생략된 폴더 경로', exact: true }).click();
+  assert.equal(await page.getByRole('menu', { name: '생략된 폴더 경로' }).getByRole('menuitem').count(), 3);
+  await page.getByRole('menuitem', { name: '10월 3일', exact: true }).click();
+  await page.getByRole('heading', { name: '10월 3일', exact: true }).waitFor();
+  await nav.getByRole('button', { name: '내 보관함', exact: true }).click();
+  await page.getByRole('heading', { name: '전체 녹음', exact: true }).waitFor();
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1440, 900));
+  await open('알고리즘'); await open('10월 3일'); await open('요약본');
+  await nav.getByRole('button', { name: '알고리즘', exact: true }).waitFor();
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await page.waitForTimeout(100);
+  const image = await app.evaluate(async ({ BrowserWindow }) => (await BrowserWindow.getAllWindows()[0].webContents.capturePage(undefined, { stayHidden: true, stayAwake: true })).toPNG().toString('base64'));
+  await writeFile(path.join(data, 'breadcrumb.png'), Buffer.from(image, 'base64'));
+  assert.deepEqual(errors, []);
+  console.log('PASS: ancestor/root navigation, current folder, responsive overflow menu, expanded paths restored, 860px layout');
+  console.log('TEST_PROFILE', data);
+} finally {
+  await app.evaluate(({ BrowserWindow }) => { for (const window of BrowserWindow.getAllWindows()) window.destroy(); }).catch(() => {});
+  await app.close().catch(() => {});
+}

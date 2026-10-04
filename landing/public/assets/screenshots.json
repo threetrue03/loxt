@@ -1,0 +1,75 @@
+{
+  "version": "1.8.0",
+  "examples": true,
+  "liveInference": false,
+  "exampleAudio": "silent WAV and scripted transcript/speaker data; not accuracy or speed measurements",
+  "capturedAt": "2026-10-04T03:25:41.301Z",
+  "images": [
+    {
+      "file": "home.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "work-home"
+    },
+    {
+      "file": "workspace.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "workspace-menu"
+    },
+    {
+      "file": "library.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "work-library"
+    },
+    {
+      "file": "script.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "speaker-script"
+    },
+    {
+      "file": "organize.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "multi-select"
+    },
+    {
+      "file": "trash.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "trash-selection"
+    },
+    {
+      "file": "conversion.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "work-paused-conversion"
+    },
+    {
+      "file": "recording.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "work-paused-recording"
+    },
+    {
+      "file": "models.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "model-library"
+    },
+    {
+      "file": "live-home.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "live-home"
+    },
+    {
+      "file": "live.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "live-scripted-example"
+    }
+  ]
+}

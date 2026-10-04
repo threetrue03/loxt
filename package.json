@@ -1,0 +1,112 @@
+{
+  "name": "sorinote-desktop",
+  "version": "1.10.0",
+  "private": true,
+  "description": "LOXT 로컬 전사 데스크톱 앱",
+  "author": "LOXT",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:web": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "start": "npm run build && node scripts/start.mjs",
+    "test": "npm run build && node scripts/smoke.mjs",
+    "test:ui": "npm run build && node scripts/ui-design-smoke.mjs",
+    "preview:design": "npm run build && node scripts/preview-design.mjs",
+    "bundle:python": "node scripts/bundle-python.mjs",
+    "assets": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-icon.ps1",
+    "package": "npm run bundle:python && npm run bundle:youtube && npm run assets && npm run build && electron-builder --dir --win --x64",
+    "package:installer": "npm run bundle:python && npm run bundle:youtube && npm run assets && npm run build && node scripts/package-installer.cjs && node scripts/release-manifest.mjs",
+    "test:release": "node --test scripts/release.test.cjs scripts/automatic-transcription.test.cjs scripts/external-models.test.cjs scripts/conversion-queue.test.cjs scripts/nested-folders.test.cjs scripts/trash.test.cjs scripts/library-interactions.test.cjs scripts/workspace-libraries.test.cjs scripts/transcript-timestamps.test.cjs scripts/live.test.cjs scripts/youtube.test.cjs scripts/appearance.test.cjs",
+    "test:live": "npm run build && node scripts/live-smoke.mjs",
+    "bundle:youtube": "node scripts/bundle-youtube.mjs",
+    "test:youtube": "npm run build && node scripts/youtube-smoke.mjs",
+    "test:theme": "npm run build && node scripts/theme-smoke.mjs"
+  },
+  "dependencies": {
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "6.1.1",
+    "electron": "44.5.1",
+    "electron-builder": "^26.0.12",
+    "playwright": "^1.56.0",
+    "unzipper": "0.12.5",
+    "vite": "8.3.2"
+  },
+  "build": {
+    "appId": "local.sorinote.desktop",
+    "productName": "LOXT",
+    "electronDist": "node_modules/electron/dist",
+    "npmRebuild": false,
+    "directories": {
+      "output": "release/stage5"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "python",
+        "to": "python",
+        "filter": [
+          "*.py",
+          "requirements*.txt"
+        ]
+      },
+      {
+        "from": ".runtime/python",
+        "to": "python-runtime",
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**"
+        ]
+      },
+      {
+        "from": "build/THIRD-PARTY-NOTICES.md",
+        "to": "THIRD-PARTY-NOTICES.md"
+      },
+      {
+        "from": ".runtime/youtube",
+        "to": "youtube",
+        "filter": [
+          "yt-dlp.exe",
+          "version.json"
+        ]
+      }
+    ],
+    "win": {
+      "signAndEditExecutable": true,
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "include": "build/installer.nsh",
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "LOXT",
+      "runAfterFinish": false,
+      "installerLanguages": [
+        "ko_KR",
+        "en_US"
+      ],
+      "artifactName": "LOXT-Setup-${version}-${arch}.${ext}"
+    }
+  }
+}

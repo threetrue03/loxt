@@ -1,0 +1,33 @@
+const shapes = {
+  youtube: <><rect x="3" y="5" width="18" height="14" rx="4"/><path d="m10 9 5 3-5 3Z"/></>,
+  home: <><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z"/><path d="M9 21v-8h6v8"/></>,
+  copy: <><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V3H3v13h5"/></>,
+  speaker: <><path d="M3 9h4l5-5v16l-5-5H3Z"/><path d="M16 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/></>,
+  edit: <path d="m15 4 5 5M4 20l5-1L20 8a2 2 0 0 0-5-5L4 14ZM4 14l5 5"/>,
+  chevronDown: <path d="m6 9 6 6 6-6"/>,
+  chevronRight: <path d="m9 6 6 6-6 6"/>,
+  refresh: <path d="M20 7v5h-5M4 17v-5h5M5 8a8 8 0 0 1 13-3l2 3M4 16l2 3a8 8 0 0 0 13-3"/>,
+  play: <path d="m9 5 11 7-11 7Z"/>,
+  pause: <><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></>,
+  stop: <rect x="5" y="5" width="14" height="14" rx="2"/>,
+  download: <path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/>,
+  plus: <path d="M12 5v14M5 12h14"/>,
+  more: <><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></>,
+  grid: <><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></>,
+  compact: <><rect x="3" y="4" width="7" height="16" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="15" width="7" height="5" rx="1.5"/></>,
+  list: <path d="M4 6h16M4 12h16M4 18h16"/>,
+  sidebar: <><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M6 8v1M6 12v1"/></>,
+  mic: <><rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></>,
+  folder: <path d="M3 7V5a2 2 0 0 1 2-2h5l3 3h6a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/>,
+  file: <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8ZM14 2v6h6M8 13h8M8 17h6"/>,
+  search: <><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></>,
+  upload: <path d="M12 16V3m-5 5 5-5 5 5M4 15v5h16v-5"/>,
+  clock: <><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></>,
+  trash: <path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/>,
+  settings: <><path d="m9 3-1 3-3 1-2 3 2 2-1 4 3 2 3-1 2 4 3-1 1-3 4-1 1-4-3-2V6l-4-1-2-3Z"/><circle cx="12" cy="12" r="3"/></>,
+  shield: <path d="m12 2 8 3v7c0 5-8 10-8 10S4 17 4 12V5ZM8 12l3 3 5-6"/>,
+};
+
+export default function Icon({ name }) {
+  return <svg viewBox="0 0 24 24" aria-hidden="true">{shapes[name]}</svg>;
+}

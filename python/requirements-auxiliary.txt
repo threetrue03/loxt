@@ -1,0 +1,4 @@
+sherpa-onnx==1.13.8
+SoundCard==0.4.6
+numpy==2.4.3
+av==16.1.0

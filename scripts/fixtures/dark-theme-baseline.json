@@ -1,0 +1,90 @@
+{
+  ".app-header": {
+    "color": "rgb(242, 242, 239)",
+    "backgroundColor": "rgb(30, 30, 30)",
+    "borderTopColor": "rgb(242, 242, 239)",
+    "borderRadius": "0px",
+    "fontFamily": "SUIT, sans-serif",
+    "fontSize": "14px"
+  },
+  ".sidebar": {
+    "color": "rgb(242, 242, 239)",
+    "backgroundColor": "rgb(25, 25, 25)",
+    "borderTopColor": "rgb(242, 242, 239)",
+    "borderRadius": "0px",
+    "fontFamily": "SUIT, sans-serif",
+    "fontSize": "14px"
+  },
+  ".main": {
+    "color": "rgb(242, 242, 239)",
+    "backgroundColor": "rgb(35, 35, 35)",
+    "borderTopColor": "rgb(242, 242, 239)",
+    "borderRadius": "0px",
+    "fontFamily": "SUIT, sans-serif",
+    "fontSize": "14px"
+  },
+  ".note-card": {
+    "color": "rgb(238, 238, 235)",
+    "backgroundColor": "rgb(43, 45, 44)",
+    "borderTopColor": "rgb(68, 70, 65)",
+    "borderRadius": "9px",
+    "fontFamily": "SUIT, sans-serif",
+    "fontSize": "14px"
+  },
+  ".note-card .note-title": {
+    "color": "rgb(238, 238, 235)",
+    "backgroundColor": "rgba(0, 0, 0, 0)",
+    "borderTopColor": "rgb(238, 238, 235)",
+    "borderRadius": "0px",
+    "fontFamily": "SUIT, sans-serif",
+    "fontSize": "17px"
+  },
+  ".note-card .note-folder": {
+    "color": "rgb(192, 197, 187)",
+    "backgroundColor": "rgba(0, 0, 0, 0)",
+    "borderTopColor": "rgb(192, 197, 187)",
+    "borderRadius": "0px",
+    "fontFamily": "SUIT, sans-serif",
+    "fontSize": "11px"
+  },
+  ".note-card .cell": {
+    "color": "rgb(182, 188, 177)",
+    "backgroundColor": "rgba(0, 0, 0, 0)",
+    "borderTopColor": "rgb(182, 188, 177)",
+    "borderRadius": "0px",
+    "fontFamily": "SUIT, sans-serif",
+    "fontSize": "10px"
+  },
+  ".preview-segment": {
+    "color": "rgb(222, 223, 217)",
+    "backgroundColor": "rgba(0, 0, 0, 0)",
+    "borderTopColor": "rgb(222, 223, 217)",
+    "borderRadius": "0px",
+    "fontFamily": "SUIT, sans-serif",
+    "fontSize": "11px"
+  },
+  ".folder-card": {
+    "color": "rgb(222, 222, 218)",
+    "backgroundColor": "rgb(43, 45, 44)",
+    "borderTopColor": "rgb(65, 68, 65)",
+    "borderRadius": "9px",
+    "fontFamily": "SUIT, sans-serif",
+    "fontSize": "14px"
+  },
+  ".folder-card>svg": {
+    "color": "rgb(181, 216, 233)",
+    "backgroundColor": "rgba(0, 0, 0, 0)",
+    "borderTopColor": "rgb(181, 216, 233)",
+    "borderRadius": "0px",
+    "fontFamily": "SUIT, sans-serif",
+    "fontSize": "14px"
+  },
+  ".custom-select .menu-trigger": {
+    "color": "rgb(222, 222, 218)",
+    "backgroundColor": "rgb(40, 40, 39)",
+    "borderTopColor": "rgb(72, 72, 68)",
+    "borderRadius": "9px",
+    "fontFamily": "SUIT, sans-serif",
+    "fontSize": "12px"
+  }
+}

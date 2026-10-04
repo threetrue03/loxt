@@ -1,0 +1,43 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
+const path = require('node:path');
+const { Library } = require('../electron/library.cjs');
+const { WorkspaceLibraries } = require('../electron/workspace-libraries.cjs');
+
+test('Work keeps existing paths, recordings and scripts; Live starts with its own empty storage', async () => {
+  await fs.mkdir('test-results', { recursive: true });
+  const root = await fs.mkdtemp(path.resolve('test-results/workspace-storage-'));
+  const existing = new Library(path.join(root, 'library'));
+  await existing.createFolder('회의');
+  const source = path.join(root, 'source.wav'); await fs.writeFile(source, 'original work audio');
+  const { note } = await existing.importAudio(source, '회의');
+  await existing.completeTranscription(note.id, { seconds: 1, segments: [{ start: 0, end: 1, text: 'Work 스크립트' }], model: 'small', language: 'ko', device: 'cpu', compute_type: 'int8' });
+  const before = await existing.list(), audioPath = (await existing.getAudio(note.id)).filename;
+  let stores = new WorkspaceLibraries(root);
+  assert.deepEqual(await stores.get('work').list(), before);
+  assert.equal((await stores.get('work').getAudio(note.id)).filename, audioPath);
+  assert.equal(await fs.readFile(audioPath, 'utf8'), 'original work audio');
+  assert.deepEqual((await stores.get('live').list()).notes, []);
+  assert.deepEqual((await stores.get('live').list()).folders, []);
+  assert.notEqual(stores.live.root, stores.work.root);
+  assert.throws(() => stores.get('../library'));
+
+  await stores.live.createFolder('회의'); await stores.live.createFolder({ name: 'Live 하위', parent: '회의' });
+  const { note: liveNote } = await stores.live.importAudio(source, '회의/Live 하위');
+  await assert.rejects(stores.live.updateNote(note.id, { title: 'wrong store' }));
+  await assert.rejects(stores.work.updateNote(liveNote.id, { title: 'wrong store' }));
+  await assert.rejects(stores.live.getAudio(note.id));
+  await assert.rejects(stores.work.getAudio(liveNote.id));
+  await stores.live.renameFolder({ folder: '회의', name: 'Live 회의' });
+  await stores.live.deleteFolder('Live 회의');
+  assert.equal((await stores.live.list()).notes[0].deleted, true);
+  assert.deepEqual(await stores.work.list(), before, 'Live folder/trash operations cannot change Work');
+  await stores.live.restoreTrash([liveNote.id]);
+  await stores.live.updateNote(liveNote.id, { deleted: true });
+  await stores.live.deleteTrash([liveNote.id]);
+  stores = new WorkspaceLibraries(root);
+  assert.deepEqual(await stores.work.list(), before);
+  assert.deepEqual((await stores.live.list()).notes, []);
+  assert.deepEqual((await stores.live.list()).folders, []);
+});

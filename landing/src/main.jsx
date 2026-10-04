@@ -1,0 +1,62 @@
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import './styles.css';
+import { version, brandExpansion, releaseUrl, download } from '../release.mjs';
+import captures from '../public/assets/screenshots.json';
+const assets = './assets/';
+function Icon({ name }) {
+ const paths = {
+  download: <><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></>,
+  mic: <><rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"/></>,
+  chip: <><rect x="5" y="5" width="14" height="14" rx="3"/><path d="M9 1v4m6-4v4M9 19v4m6-4v4M1 9h4m-4 6h4m14-6h4m-4 6h4"/><rect x="9" y="9" width="6" height="6" rx="1"/></>,
+  folder: <path d="M3 5h6l2 3h10v12H3z"/>,
+  plus: <path d="M12 5v14M5 12h14"/>,
+  people: <><circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 5a3 3 0 0 1 0 6m3 10v-3a6 6 0 0 0-2-4"/></>,
+ };
+ return <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
+}
+function Download() { return <a className="download" href={download} download><Icon name="download"/>Windows용 다운로드</a>; }
+function Screenshot({ file, alt, caption, className = 'library-preview', eager = false }) {
+ const dimensions = captures.images.find(image => image.file === file);
+ return <figure className={className}><img src={`${assets}${file}`} width={dimensions?.width} height={dimensions?.height} loading={eager ? 'eager' : 'lazy'} decoding="async" alt={alt}/><figcaption>{caption}</figcaption></figure>;
+}
+function Features({ items }) { return <div className="feature-grid">{items.map(([icon, title, text]) => <article key={title}><Icon name={icon}/><h3>{title}</h3><p>{text}</p></article>)}</div>; }
+const questions = [
+ ['Work와 Live는 어떻게 다른가요?', 'Work는 녹음을 마치거나 음성 파일을 불러온 뒤 변환하는 작업 공간입니다. Live는 녹음하는 동안 스크립트를 계속 추가합니다. 상단 로고 옆 메뉴로 전환하며, 각 모드의 녹음·폴더·최근 열람 이력은 따로 보관됩니다.'],
+ ['Live 시작을 누르면 바로 녹음되나요?', '먼저 음성 입력 권한을 확인하고 선택한 모델을 준비합니다. 준비 중에는 버튼에 다운로드 진행률이나 모델을 불러오는 상태를 표시하며, 녹음과 타이머는 시작되지 않습니다. 준비가 끝나면 자동으로 녹음을 시작합니다. 실시간 갱신 속도는 PC 사양과 모델에 따라 달라집니다.'],
+ ['녹음을 중단해도 다시 이어서 녹음할 수 있나요?', '네. Work의 녹음 중단은 일시정지입니다. 폴더와 모델을 선택하는 창을 닫은 뒤 녹음 계속을 누르면 이어서 녹음할 수 있습니다. 변환하기를 누르면 저장 후 변환을 시작하며, 버리기를 누르면 해당 새 녹음을 삭제합니다. Live에서도 일시정지와 계속 녹음을 사용할 수 있습니다.'],
+ ['변환 중에 다른 페이지로 이동해도 되나요?', '네. 녹음과 변환은 페이지를 이동해도 유지됩니다. 홈의 진행 중 영역에서 해당 기록으로 돌아가고, Work 사이드바의 변환 작업 목록에서 진행 상태와 대기열을 확인하거나 취소할 수 있습니다.'],
+ ['화자 A·B·C는 어떻게 표시되나요?', '같은 녹음 안의 목소리를 구분해 스크립트 시간 옆에 표시합니다. Work는 전체 녹음을 분석하고, Live는 임시 화자를 표시한 뒤 종료 시 전체 녹음으로 보정합니다. 사람의 실명을 알아내는 기능은 아니며, 짧은 발화·소음·겹쳐 말하는 구간에서는 구분이 달라질 수 있습니다.'],
+ ['컴퓨터에서 재생되는 소리도 녹음할 수 있나요?', '네. 녹음 시작 버튼 옆의 장치 메뉴에서 컴퓨터 소리를 선택하세요. Windows의 현재 기본 출력 장치를 따라 녹음하고, 녹음 중 기본 출력이 바뀌면 재연결합니다. 화면 영상은 저장하지 않습니다. 전환 중 짧은 소리 누락이 생길 수 있으며, 서로 다른 출력 장치의 모든 소리를 합치는 기능은 아닙니다. 마이크와 컴퓨터 소리는 각각 선택해 사용합니다.'],
+ ['인터넷 연결이 필요한가요?', '처음 모델과 실행 구성요소를 내려받거나 모델을 추가할 때는 인터넷 연결이 필요합니다. 준비가 완료되면 녹음·음성 변환·화자 분석은 내 PC에서 진행됩니다. 기존 버전에서 업데이트한 경우 첫 사용 시 추가 구성요소를 내려받을 수 있습니다.'],
+ ['NVIDIA GPU가 없어도 사용할 수 있나요?', '네. 실행 장치를 자동으로 선택하며, 사용할 수 있는 NVIDIA GPU가 없으면 CPU로 변환합니다. 변환 속도와 Live 갱신 지연은 PC 사양·모델·녹음 내용에 따라 달라집니다.'],
+ ['최근 열어본 기록과 전체 보관함은 어디에서 보나요?', '홈에는 최근 열어본 기록을 최대 4개 표시하고 앱을 다시 실행해도 이력을 유지합니다. 모두 보기에서는 전체 기록을 관리하고, 내 보관함과 폴더에서는 해당 위치의 기록을 확인할 수 있습니다. 카드·작은 카드·목록 보기와 정렬은 보관함에서 선택합니다.'],
+ ['여러 녹음을 한 번에 폴더로 옮길 수 있나요?', '보관함의 빈 공간을 드래그해 여러 녹음을 선택하세요. 선택한 녹음을 길게 누른 뒤 원하는 폴더에 놓으면 함께 이동합니다. 폴더 안에 하위 폴더를 만들 수 있으며, 폴더를 지정하지 않은 녹음은 내 보관함에 저장됩니다.'],
+ ['폴더를 삭제하면 녹음도 사라지나요?', '폴더와 하위 폴더는 삭제되고, 안의 녹음은 휴지통으로 이동합니다. 복구하면 내 보관함에 저장됩니다. 휴지통에서는 선택한 기록을 복구하거나 영구 삭제하고 모두 비울 수 있습니다. 영구 삭제한 원본과 스크립트는 복구할 수 없습니다.'],
+ ['기존 버전에서 어떻게 업데이트하나요?', '새 설치 파일을 실행하면 설치된 버전을 확인하고 업데이트를 진행합니다. 기존 녹음·스크립트·모델·설정은 유지됩니다. 설치된 모델은 검사 후 재사용하고, 필요한 새 구성요소는 준비합니다.'],
+];
+function App() { return <>
+ <a className="skip" href="#main">본문으로 이동</a>
+ <header className="nav wrap"><a href="#main" aria-label="LOXT 홈"><img className="logo" src={`${assets}LOXT-lockup-white.svg`} alt="LOXT"/></a><nav aria-label="메인 메뉴"><a href="#workspaces">Work · Live</a><a href="#features">기능</a><a href="#models">모델</a><a className="nav-download" href="#download">다운로드 <span aria-hidden="true">↙</span></a></nav></header>
+ <main id="main">
+  <section className="hero wrap"><p className="brand-expansion">{brandExpansion}</p><h1>녹음에서 스크립트까지,<br/>내 PC에서.</h1><p>녹음 파일은 Work로. 실시간 대화는 Live로.<br/>내 하드웨어로 변환하고, 각 보관함에 기록하세요.</p><Download/><div className="release">v{version} <span>·</span> Windows 64비트</div><Screenshot eager file="home.png" className="hero-preview" alt="LOXT 1.8.0 Work 홈. 새 녹음 시작, 파일 불러오기, 최근 열어본 기록과 폴더 바로가기" caption="LOXT 1.8.0 실제 앱 UI · 소개를 위한 예시 기록입니다."/></section>
+  <section id="workspaces" className="workspaces wrap"><div className="section-heading"><h2>파일을 정리할 때는 Work.<br/>지금 대화를 기록할 때는 Live.</h2><p>상단 로고 옆 메뉴에서 작업 공간을 바꾸세요.</p></div><div className="workspace-grid"><article><span className="model-name">Work</span><h3>녹음이 끝나면, 변환하세요.</h3><p>파일을 불러오거나 새로 녹음한 뒤 모델과 폴더를 선택하세요. 변환이 끝나면 스크립트와 원본을 함께 확인할 수 있습니다.</p><Screenshot file="home.png" alt="Work 홈의 녹음과 파일 불러오기, 최근 기록" caption="Work 홈 · 예시 기록"/></article><article><span className="model-name">Live</span><h3>말하는 동안, 기록하세요.</h3><p>입력 권한과 모델 준비를 마치면 자동으로 녹음을 시작합니다. 스크립트가 계속 추가되고, 종료 후 전체 녹음으로 화자를 보정합니다.</p><Screenshot file="live-home.png" alt="Work와 별도 기록과 폴더가 있는 Live 홈" caption="Live 홈 · 별도 보관함"/></article></div><p className="model-note">녹음·폴더·최근 열람 이력을 Work와 Live 각각 보관합니다.</p></section>
+  <section id="features" className="features wrap"><h2>기록에 필요한 흐름을 한곳에.</h2><Features items={[
+   ['mic','마이크와 컴퓨터 소리','마이크를 고르거나 컴퓨터 소리를 녹음하세요. 컴퓨터 소리는 현재 기본 출력 장치를 따라가고, 장치가 바뀌면 다시 연결합니다.'],
+   ['chip','내 하드웨어로 변환','사용 가능한 NVIDIA GPU 또는 CPU를 자동으로 선택합니다. 준비된 모델로 내 PC에서 음성을 처리하세요.'],
+   ['folder','홈에서 이어서 시작','최근 열어본 기록과 폴더로 바로 돌아가세요. 진행 중인 작업이 있으면 홈에서도 상태를 확인할 수 있습니다.'],
+  ]}/></section>
+  <section className="workflow live-workflow wrap" aria-labelledby="live-title"><div className="workflow-copy"><h2 id="live-title">지금 하는 말을,<br/>지금 읽을 수 있도록.</h2><p className="workflow-intro">Live에서 말하는 동안 스크립트가 이어집니다. 아직 인식 중인 문장과 확정된 내용을 구분해 보여줍니다.</p><ol><li><span>01</span><div><h3>한 번 눌러 시작</h3><p>Live 시작을 누르면 입력 권한을 확인하고 모델을 준비한 뒤 자동으로 녹음합니다. 준비 중에는 녹음하지 않습니다.</p></div></li><li><span>02</span><div><h3>페이지를 이동해도 유지</h3><p>보관함이나 Work로 이동해도 Live 녹음을 이어갑니다. 필요할 때 녹음으로 돌아가거나 일시정지하세요.</p></div></li><li><span>03</span><div><h3>종료 후 다시 확인</h3><p>남은 음성을 변환하고 전체 녹음으로 화자 표시를 보정합니다. 저장된 원본과 스크립트는 Live 보관함에 남습니다.</p></div></li></ol></div><Screenshot file="live.png" alt="Live 녹음 화면. 시분초 타이머, 표준 모델, 화자 A와 B, 인식 중인 문장과 Live 종료 버튼" caption="Live 스크립트 UI · 예시 문장과 화자 데이터"/></section>
+  <section className="workflow recording-workflow wrap" aria-labelledby="recording-title"><div className="workflow-copy"><h2 id="recording-title">중단해도,<br/>다시 이어서.</h2><p className="workflow-intro">Work의 녹음 중단은 일시정지입니다. 아직 할 말이 남았다면 창을 닫고 녹음 계속을 누르세요.</p><ol><li><span>01</span><div><h3>폴더와 모델 고르기</h3><p>녹음 제목은 제목 자리에서 수정합니다. 중단한 뒤 저장할 폴더와 모델을 고르고 변환하기를 누르세요.</p></div></li><li><span>02</span><div><h3>녹음도 변환도 백그라운드로</h3><p>페이지를 다녀와도 작업은 유지됩니다. 변환 대기열에서 파일별 진행 상태와 대기 중인 기록을 확인할 수 있습니다.</p></div></li><li><span>03</span><div><h3>필요 없는 녹음은 버리기</h3><p>변환하기 왼쪽의 버리기 버튼으로 해당 새 녹음을 삭제할 수 있습니다.</p></div></li></ol></div><Screenshot file="conversion.png" alt="LOXT 1.8.0 Work의 녹음 중단 후 폴더와 변환 모델을 선택하는 창. 왼쪽 버리기, 오른쪽 변환하기 버튼" caption="Work 녹음 중단 후 폴더·모델 선택 · 예시 녹음"/></section>
+  <section className="workflow speaker-workflow wrap" aria-labelledby="speaker-title"><div className="workflow-copy"><h2 id="speaker-title">누가 말했는지,<br/>다시 찾기 쉽게.</h2><p className="workflow-intro">목소리를 A·B·C로 구분하고 스크립트 시간 옆에 표시합니다. 같은 목소리가 돌아오면 같은 화자 표시를 사용합니다.</p><ol><li><span>01</span><div><h3>문장으로 원본 찾기</h3><p>스크립트 줄을 누르면 해당 시간으로 재생 위치가 이동합니다. 원본을 듣고 내용을 확인하세요.</p></div></li><li><span>02</span><div><h3>복사와 내보내기</h3><p>전체 복사의 완료는 버튼에서 확인합니다. 화자 표시를 유지해 스크립트를 복사하거나 파일로 내보낼 수 있습니다.</p></div></li><li><span>03</span><div><h3>필요하면 다시 변환하기</h3><p>다른 모델로 같은 원본을 다시 변환하세요. 작업 중에는 스크립트 영역에 진행 중인 상태를 표시합니다.</p></div></li></ol></div><Screenshot file="script.png" alt="Work 스크립트의 화자 A B C 배지, 전체 복사와 내보내기, 원본 재생바와 다시 변환하기 버튼" caption="화자와 시간, 스크립트와 원본을 함께 · 예시 기록"/></section>
+  <section className="updates wrap" aria-labelledby="updates-title"><div className="section-heading"><span className="model-name">Work · Live 보관함</span><h2 id="updates-title">모아서 선택하고,<br/>폴더로 옮기세요.</h2><p>필요할 때 다시 읽을 수 있도록, 익숙한 방식으로.</p></div><Features items={[
+   ['folder','폴더 안에 폴더','회의와 강의 아래에 주제별 폴더를 만드세요. 이름은 그 자리에서 수정하고, 우클릭 메뉴로 관리할 수 있습니다.'],
+   ['folder','여러 녹음을 함께 이동','빈 공간을 드래그해 기록을 선택하고, 길게 눌러 원하는 폴더에 놓으세요. 선택한 기록을 함께 옮길 수 있습니다.'],
+   ['mic','나에게 맞는 보기','카드·작은 카드·목록 보기와 정렬을 선택하세요. 카드는 배경을 눌러 열고, 스크립트 미리보기는 선택하거나 스크롤할 수 있습니다.'],
+  ]}/><Screenshot file="library.png" className="update-preview" alt="LOXT 1.8.0 모든 기록 보관함. 상단 폴더 영역과 아래 녹음 카드, 카드 보기와 정렬 메뉴" caption="폴더와 녹음 카드를 나눈 보관함 · 예시 기록"/><div className="management-previews"><Screenshot file="organize.png" alt="목록 보기에서 두 녹음이 선택된 화면" caption="여러 기록 선택 · 예시 보관함"/><Screenshot file="trash.png" alt="휴지통에서 기록 선택 후 복구 삭제 모두 비우기를 제공하는 화면" caption="선택 복구·영구 삭제·모두 비우기"/></div><a className="release-link" href={releaseUrl}>v{version} 릴리스 보기 ↗</a></section>
+  <section id="models" className="models wrap"><div className="section-heading"><h2>내 PC에 맞는 모델을 선택하세요.</h2><p>속도와 정확도 사이, 나에게 필요한 쪽으로.</p></div><div className="model-grid">{[['저성능','가볍고 빠르게','PC의 부담을 줄이고 빠르게 내용을 확인하고 싶을 때.','small'],['표준','균형 있게','일상적인 회의와 강의를 정리하고 싶을 때.','large-v3-turbo'],['고성능','정확도 중심으로','더 많은 자원을 사용해 복잡한 음성을 변환하고 싶을 때.','large-v3']].map(([name,title,text,hint])=><article key={name}><span className="model-name">{name}</span><h3>{title}</h3><p>{text}</p><div className="model-hint">{hint}</div></article>)}</div><p className="model-note">설치 프로그램에서 선택하거나 앱의 모델 보관함에서 추가로 설치하세요.<br/>실행 장치는 자동으로 선택하며, 호환되는 외부 모델도 불러올 수 있습니다.</p><Screenshot file="models.png" className="update-preview" alt="LOXT 모델 보관함의 저성능 표준 고성능 모델과 설치 버튼, 외부 모델 불러오기" caption="앱 안에서 모델 설치·관리 · 예시 보관함"/></section>
+  <section className="faq wrap"><h2>궁금한 점이 있나요?</h2><div>{questions.map(([question,answer])=><details key={question}><summary>{question}<Icon name="plus"/></summary><p>{answer}</p></details>)}</div></section>
+  <section id="download" className="closing wrap"><img src={`${assets}LOXT-symbol-white.svg`} width="52" height="52" alt=""/><h2>다음 녹음부터, LOXT로.</h2><p>파일은 Work로, 대화는 Live로. 기록은 내 PC에.</p><Download/><div className="release">v{version} <span>·</span> Windows 64비트</div><a className="release-link" href={releaseUrl}>변경 사항 확인하기 ↗</a></section>
+ </main><footer className="wrap"><img className="logo" src={`${assets}LOXT-wordmark-white.svg`} alt="LOXT"/><p>Local Speech-to-Text powered by your own hardware.</p><a href="#main">맨 위로 ↑</a></footer>
+ </>; }
+createRoot(document.getElementById('root')).render(<App/>);

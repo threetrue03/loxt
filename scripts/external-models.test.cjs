@@ -1,0 +1,40 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
+const path = require('node:path');
+const { Transcriber } = require('../electron/transcriber.cjs');
+
+test('external models are copied, registered, persist selection and delete only the managed copy', async () => {
+  await fs.mkdir('test-results', { recursive: true });
+  const profile = await fs.mkdtemp(path.resolve('test-results/external-'));
+  const source = path.join(profile, 'source-model'); await fs.mkdir(source);
+  await fs.writeFile(path.join(source, 'model.bin'), 'test binary');
+  await fs.writeFile(path.join(source, 'config.json'), '{}');
+  await fs.writeFile(path.join(source, 'tokenizer.json'), '{}');
+  await fs.writeFile(path.join(source, 'preprocessor_config.json'), '{}');
+  await fs.writeFile(path.join(source, 'do-not-copy.py'), 'not executable in the application');
+  const engine = new Transcriber({ root: path.join(profile, 'engine'), resources: path.resolve('python') });
+  engine.run = async () => { throw new Error('no GPU'); };
+  let state = await engine.importModel(source);
+  const model = state.models.find(item => item.external);
+  assert.equal(model.downloaded, true); assert.equal(model.label, 'source-model');
+  assert.equal(await fs.readFile(path.join(engine.root, 'models', model.id, 'model.bin'), 'utf8'), 'test binary');
+  await assert.rejects(fs.access(path.join(engine.root, 'models', model.id, 'do-not-copy.py')));
+  state = await engine.configure({ model: model.id, device: 'auto' }); assert.equal(state.model, model.id);
+  const restarted = new Transcriber({ root: engine.root, resources: engine.resources }); restarted.run = engine.run;
+  assert.equal((await restarted.detect()).model, model.id);
+  await engine.deleteModel(model.id);
+  assert.equal((await engine.modelList()).some(item => item.id === model.id), false);
+  assert.equal(await fs.readFile(path.join(source, 'model.bin'), 'utf8'), 'test binary');
+  assert.equal(engine.preferences.device, 'auto');
+  await assert.rejects(engine.configure({ model: 'external-../../library', device: 'auto' }), /설정/);
+  assert.equal(engine.busy, false);
+});
+test('invalid imports and corrupt registry never become selectable models', async () => {
+  const root = await fs.mkdtemp(path.resolve('test-results/external-invalid-'));
+  const engine = new Transcriber({ root, resources: path.resolve('python') });
+  await assert.rejects(engine.importModel(root), /모델 폴더/);
+  assert.equal(engine.busy, false);
+  await fs.writeFile(path.join(root, 'external-models.json'), JSON.stringify([{ id: '../library', label: 'invalid' }]));
+  await assert.rejects(engine.catalogue(), /올바르지/);
+});
