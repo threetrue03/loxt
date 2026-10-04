@@ -196,3 +196,5 @@ Node.js 22.12 이상에서 `npm ci`로 의존성을 설치합니다.
 - 컴퓨터 소리는 SoundCard의 Windows WASAPI 루프백을 사용해 기본 출력 장치를 0.5초 간격으로 확인하고 변경 시 같은 세션에서 재연결합니다. 전환 중 입력이 없는 구간은 무음으로 유지합니다.
 - CPU의 sherpa-onnx + Pyannote segmentation 3.0 + NeMo TitaNet small로 화자를 A·B·C로 구분합니다. Live 표시를 종료 후 전체 분석으로 보정합니다. 스크립트·복사·내보내기에 화자 표시를 보존합니다.
 - 화자 분석과 출력 장치 엔진은 설치 프로그램의 환경 준비에 포함되며, 기존 설치는 첫 사용 시 앱이 필요한 구성요소를 추가 준비합니다.
+
+소개 사이트: https://loxt.pages.dev/
