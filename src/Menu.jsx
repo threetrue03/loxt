@@ -1,7 +1,9 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { DialogContext } from './DialogContext.js';
+import { useContext, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 export default function Menu({ label, trigger, children, className = '', disabled = false, upward = false }) {
+  const dialog = useContext(DialogContext);
   const [open, setOpen] = useState(false);
   const root = useRef(null), button = useRef(null), panel = useRef(null);
   useLayoutEffect(() => {
@@ -18,7 +20,15 @@ export default function Menu({ label, trigger, children, className = '', disable
     function outside(event) { if (!root.current.contains(event.target) && !popup.contains(event.target)) setOpen(false); }
     function keys(event) {
       if (event.key === 'Escape') { event.preventDefault(); setOpen(false); button.current.focus(); }
-      if (event.key === 'Tab') setOpen(false);
+      if (event.key === 'Tab') {
+        setOpen(false);
+        if (dialog?.current) {
+          event.preventDefault();
+          const items = [...dialog.current.querySelectorAll('button,input,select,[tabindex="0"]')].filter(item => !item.disabled && !popup.contains(item) && item.getClientRects().length);
+          const index = items.indexOf(button.current);
+          items[(index + (event.shiftKey ? -1 : 1) + items.length) % items.length]?.focus();
+        } else button.current?.focus();
+      }
       if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
       const items = [...popup.querySelectorAll('[role^="menuitem"]')].filter(item => !item.disabled);
       if (!items.length) return;
@@ -32,5 +42,5 @@ export default function Menu({ label, trigger, children, className = '', disable
     return () => { observer.disconnect(); document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', keys); window.removeEventListener('resize', place); };
   }, [open, upward]);
   function close() { setOpen(false); button.current?.focus(); }
-  return <div ref={root} className={`menu-control ${className} ${upward ? 'menu-up' : ''}`}><button ref={button} className="menu-trigger" type="button" aria-label={label} aria-haspopup="menu" aria-expanded={open} disabled={disabled} onClick={() => setOpen(value => !value)} onKeyDown={event => { if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); setOpen(true); } }}>{trigger}</button>{open ? createPortal(<div ref={panel} className={`menu-popover unified-menu ${className}`} role="menu" aria-label={label}>{children(close)}</div>, document.body) : null}</div>;
+  return <div ref={root} className={`menu-control ${className} ${upward ? 'menu-up' : ''}`}><button ref={button} className="menu-trigger" type="button" aria-label={label} aria-haspopup="menu" aria-expanded={open} disabled={disabled} onClick={() => setOpen(value => !value)} onKeyDown={event => { if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); setOpen(true); } }}>{trigger}</button>{open ? createPortal(<div ref={panel} className={`menu-popover unified-menu ${className}`} role="menu" aria-label={label}>{children(close)}</div>, dialog?.current || document.body) : null}</div>;
 }

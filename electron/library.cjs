@@ -11,6 +11,11 @@ function validNote(note) {
     && typeof note.audioFile === 'string' && path.basename(note.audioFile) === note.audioFile
     && Boolean(MIME[path.extname(note.audioFile)]) && Array.isArray(note.segments);
 }
+function recoverConversion(note) {
+  if (note.done && note.diarization?.status === 'pending') return { ...note, status: 'partial', transcriptionError: '', diarization: { status: 'failed', error: '앱 종료로 화자 분석이 중단됐습니다. 화자 분석만 다시 시도할 수 있습니다.' } };
+  if (['queued', 'transcribing'].includes(note.status)) return { ...note, status: 'failed', transcriptionError: '앱 종료로 변환이 중단됐습니다. 다시 시도해 주세요.' };
+  return note;
+}
 
 function title(value) {
   if (typeof value !== 'string' || !value.trim() || value.length > 120) throw new Error('제목을 120자 이내로 입력해 주세요.');
@@ -28,12 +33,21 @@ function date() {
   const now = new Date();
   return `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')}`;
 }
+async function replaceFile(source, target) {
+  for (let attempt = 0; ; attempt++) {
+    try { await fs.rename(source, target); return; }
+    catch (error) {
+      if (process.platform !== 'win32' || !['EPERM', 'EBUSY', 'EACCES'].includes(error.code) || attempt >= 4) throw error;
+      await new Promise(resolve => setTimeout(resolve, 25 * 2 ** attempt));
+    }
+  }
+}
 async function atomicJson(filename, data) {
   const temporary = filename + '.tmp';
   const handle = await fs.open(temporary, 'w');
   try { await handle.writeFile(JSON.stringify(data, null, 2)); await handle.sync(); }
   finally { await handle.close(); }
-  await fs.rename(temporary, filename);
+  await replaceFile(temporary, filename);
 }
 async function exists(filename) {
   try { await fs.access(filename); return true; } catch { return false; }
@@ -45,6 +59,8 @@ class Library {
     this.recordings = path.join(root, 'recordings');
     this.index = path.join(root, 'library.json');
     this.sessions = new Map();
+    this.revision = 0;
+    this.onChange = () => {};
     this.data = { version: 1, folders: [], notes: [] };
     this.queue = Promise.resolve();
     this.ready = this.initialize();
@@ -64,33 +80,39 @@ class Library {
     if (await exists(journalPath)) await this.commitFolderRename(JSON.parse(await fs.readFile(journalPath, 'utf8')));
     const trashJournal = path.join(this.root, 'trash-delete.json');
     if (await exists(trashJournal)) await this.commitTrashDelete(JSON.parse(await fs.readFile(trashJournal, 'utf8')));
-    try {
-      const data = JSON.parse(await fs.readFile(this.index, 'utf8'));
-      if (data.version !== 1 || !Array.isArray(data.folders) || !Array.isArray(data.notes)
-        || !data.folders.every(name => typeof name === 'string' && name.length <= 1024)
-        || !data.notes.every(validNote)) throw new Error('저장 목록 형식이 올바르지 않습니다.');
-      this.data = { ...data, folderParents: data.folderParents || {} };
-      if (typeof this.data.folderParents !== 'object' || Array.isArray(this.data.folderParents)
-        || Object.entries(this.data.folderParents).some(([child, parent]) => !data.folders.includes(child) || !data.folders.includes(parent) || child === parent)) throw new Error('폴더 구조가 올바르지 않습니다.');
-      for (const folder of data.folders) {
-        const seen = new Set(); let current = folder;
-        while (Object.hasOwn(this.data.folderParents, current)) {
-          if (seen.has(current)) throw new Error('폴더 구조가 올바르지 않습니다.');
-          seen.add(current); current = this.data.folderParents[current];
+    let recovery = null;
+    try { this.data = this.validateIndex(JSON.parse(await fs.readFile(this.index, 'utf8'))); }
+    catch (error) {
+      recovery = { reason: error.code === 'ENOENT' ? 'missing' : 'damaged', backup: false, skipped: 0 };
+      if (error.code !== 'ENOENT') {
+        // Preserve the original before attempting any repair; failure aborts safely.
+        recovery.archive = this.index + '.damaged-' + Date.now() + '-' + randomUUID();
+        await fs.copyFile(this.index, recovery.archive);
+      }
+      try { this.data = this.validateIndex(JSON.parse(await fs.readFile(this.index + '.backup', 'utf8'))); recovery.backup = true; }
+      catch {
+        this.data = { version: 1, folders: [], folderParents: {}, notes: [] };
+        if (recovery.archive) {
+          try {
+            const damaged = JSON.parse(await fs.readFile(recovery.archive, 'utf8'));
+            const salvage = { ...damaged, notes: Array.isArray(damaged.notes) ? damaged.notes.filter(validNote) : [] };
+            this.data = this.validateIndex(salvage);
+          } catch { /* Per-recording metadata is the final recovery source. */ }
         }
       }
-    } catch (error) {
-      if (error.code !== 'ENOENT') throw new Error('저장 목록을 읽지 못했습니다. 원본 파일은 보관함에 유지됩니다.');
     }
+    this.revision = this.data.revision || 0;
+    if (recovery?.reason === 'missing' && !this.data.notes.length && !(await fs.readdir(this.recordings)).length) recovery = null;
+    this.recovery = recovery || this.data.recovery || null;
     // 각 녹음의 메타데이터로 목록을 복구하므로 목록 저장 직전 중단에도 원본이 남습니다.
-    let changed = false;
+    let changed = Boolean(recovery);
     for (const entry of await fs.readdir(this.recordings, { withFileTypes: true })) {
       if (!entry.isDirectory() || !ID.test(entry.name)) continue;
       const directory = path.join(this.recordings, entry.name);
       let note;
       try { note = JSON.parse(await fs.readFile(path.join(directory, 'note.json'), 'utf8')); }
-      catch { continue; }
-      if (!validNote(note) || note.id !== entry.name) continue;
+      catch { if (recovery) recovery.skipped++; continue; }
+      if (!validNote(note) || note.id !== entry.name) { if (recovery) recovery.skipped++; continue; }
       const audio = path.join(directory, note.audioFile);
       const partial = audio + '.part';
       if (!(await exists(audio)) && await exists(partial)) {
@@ -111,23 +133,61 @@ class Library {
         await atomicJson(path.join(directory, 'note.json'), note);
       }
       if (!(await exists(audio))) continue;
-      if (note.folder && note.folder.length <= 1024 && !this.data.folders.includes(note.folder)) { this.data.folders.push(note.folder); changed = true; }
+      if (note.folder && note.folder.length <= 1024 && !this.data.folders.includes(note.folder)) {
+        const parts = note.folder.split('/');
+        for (let i = 1; i <= parts.length; i++) {
+          const folder = parts.slice(0, i).join('/');
+          if (!this.data.folders.includes(folder)) this.data.folders.push(folder);
+          if (i > 1) this.data.folderParents[folder] = parts.slice(0, i - 1).join('/');
+        }
+        changed = true;
+      }
       if (note.status === 'recording') {
         note.status = 'ready'; note.recovered = true; if (note.live) note.done = true;
         await atomicJson(path.join(directory, 'note.json'), note);
       }
-      if (note.status === 'transcribing' || note.status === 'queued') {
-        note.status = 'failed'; note.transcriptionError = '앱 종료로 변환이 중단됐습니다. 다시 시도해 주세요.';
+      const restored = recoverConversion(note);
+      if (restored !== note) {
+        note = restored;
         await atomicJson(path.join(directory, 'note.json'), note);
       }
       const current = this.data.notes.findIndex(n => n.id === note.id);
       if (current < 0) { this.data.notes.unshift(note); changed = true; }
       else if (JSON.stringify(this.data.notes[current]) !== JSON.stringify(note)) { this.data.notes[current] = note; changed = true; }
     }
-    if (changed || !(await exists(this.index))) await atomicJson(this.index, this.data);
+    if (recovery) {
+      const available = [];
+      for (const note of this.data.notes) { if (await exists(path.join(this.recordings, note.id, note.audioFile))) available.push(recoverConversion(note)); else recovery.skipped++; }
+      this.data.notes = available;
+    }
+    if (changed || !(await exists(this.index))) { this.validateIndex(this.data); await this.saveIndex(this.data, !recovery); }
+  }
+  validateIndex(data) {
+    if (data?.version !== 1 || !Array.isArray(data.folders) || !Array.isArray(data.notes)
+      || !data.folders.every(name => typeof name === 'string' && name.length <= 1024) || !data.notes.every(validNote)) throw new Error('저장 목록 형식이 올바르지 않습니다.');
+    const parents = data.folderParents || {};
+    if (typeof parents !== 'object' || Array.isArray(parents) || Object.entries(parents).some(([child, parent]) => !data.folders.includes(child) || !data.folders.includes(parent) || child === parent)) throw new Error('폴더 구조가 올바르지 않습니다.');
+    for (const folder of data.folders) {
+      let current = folder; const seen = new Set();
+      while (Object.hasOwn(parents, current)) { if (seen.has(current)) throw new Error('폴더 구조가 올바르지 않습니다.'); seen.add(current); current = parents[current]; }
+    }
+    return { ...data, folderParents: parents };
+  }
+  async saveIndex(data, backup = true) {
+    this.validateIndex(data);
+    if (backup) {
+      try {
+        this.validateIndex(JSON.parse(await fs.readFile(this.index, 'utf8')));
+        await fs.copyFile(this.index, this.index + '.backup.tmp');
+        await replaceFile(this.index + '.backup.tmp', this.index + '.backup');
+      } catch (error) { if (error.code !== 'ENOENT' && ['EACCES', 'ENOSPC', 'EPERM'].includes(error.code)) throw error; }
+    }
+    data.revision = ++this.revision; data.recovery = this.recovery || null;
+    await atomicJson(this.index, data);
+    queueMicrotask(() => this.onChange(this.revision));
   }
   snapshot() {
-    return JSON.parse(JSON.stringify({ ...this.data, storagePath: this.root }));
+    return JSON.parse(JSON.stringify({ ...this.data, revision: this.revision, recovery: this.recovery, storagePath: this.root }));
   }
   list() { return this.enqueue(() => this.snapshot()); }
   validateFolder(folder) {
@@ -144,7 +204,7 @@ class Library {
       if (name.length > 1024 || name.split('/').length > 16) throw new Error('폴더 단계가 너무 깊습니다.');
       if (this.data.folders.includes(name)) throw new Error('이미 있는 폴더 이름입니다.');
       const next = { ...this.data, folders: [...this.data.folders, name], folderParents: { ...this.data.folderParents, ...(parent ? { [name]: parent } : {}) } };
-      await atomicJson(this.index, next); this.data = next;
+      await this.saveIndex( next); this.data = next;
       return this.snapshot();
     });
   }
@@ -153,7 +213,7 @@ class Library {
     if (journal?.version !== 1 || data?.version !== 1 || !Array.isArray(data.folders) || !data.folders.every(folder => typeof folder === 'string' && folder.length <= 1024)
       || !Array.isArray(data.notes) || !data.notes.every(validNote) || !Array.isArray(journal.notes) || !journal.notes.every(validNote)) throw new Error('폴더 변경 기록을 읽지 못했습니다. 원본은 유지됩니다.');
     for (const note of journal.notes) await atomicJson(path.join(this.recordings, note.id, 'note.json'), note);
-    await atomicJson(this.index, data);
+    await this.saveIndex( data);
     await fs.unlink(path.join(this.root, 'folder-rename.json'));
   }
   renameFolder(payload) {
@@ -192,7 +252,7 @@ class Library {
   async saveNote(note) {
     await atomicJson(path.join(this.recordings, note.id, 'note.json'), note);
     const next = { ...this.data, notes: [note, ...this.data.notes.filter(n => n.id !== note.id)] };
-    await atomicJson(this.index, next); this.data = next;
+    await this.saveIndex( next); this.data = next;
     return this.snapshot();
   }
   folderSubtree(folder) {
@@ -241,7 +301,7 @@ class Library {
     if (journal?.version !== 1 || data?.version !== 1 || !Array.isArray(data.folders) || !Array.isArray(data.notes) || !data.notes.every(validNote)
       || !Array.isArray(journal.ids) || journal.ids.some(id => !ID.test(id) || data.notes.some(note => note.id === id))) throw new Error('휴지통 삭제 기록을 읽지 못했습니다.');
     // The journal stays until all UUID directories are removed, preventing metadata recovery from resurrecting deleted recordings.
-    await atomicJson(this.index, data);
+    await this.saveIndex( data);
     for (const id of journal.ids) {
       const target = path.resolve(this.recordings, id);
       if (path.dirname(target) !== path.resolve(this.recordings)) throw new Error('잘못된 삭제 위치입니다.');
@@ -364,7 +424,9 @@ class Library {
       if (!Array.isArray(segments) || !segments.every(s => Number.isFinite(s.start) && Number.isFinite(s.end) && s.start >= 0 && s.start <= s.end && s.end <= seconds && typeof s.text === 'string')) throw new Error('Live 스크립트 시간이 올바르지 않습니다.');
       session.note = { ...session.note, segments, seconds, duration: duration(seconds) };
       await session.handle.write(waveHeader(session.bytes), 0, 44, 0); await session.handle.sync();
-      await this.saveNote(session.note);
+      // Per-note checkpoints remain durable; rebuilding the global index recovers them.
+      await atomicJson(path.join(this.recordings, id, 'note.json'), session.note);
+      this.data.notes = [session.note, ...this.data.notes.filter(note => note.id !== id)];
     });
   }
   abandonRecording(id) {
@@ -432,11 +494,12 @@ class Library {
       if (result.segments.some(s => s.start >= result.seconds || s.end > result.seconds)) throw new Error('스크립트 시간이 원본 녹음 길이를 초과했습니다. 다시 변환해 주세요.');
       const directory = path.join(this.recordings, id);
       await atomicJson(path.join(directory, 'transcript.json'), result);
-      const text = result.segments.map(s => `[${duration(s.start)}] ${s.speaker ? `[${s.speaker}] ` : ''}${s.text}`).join('\n\n');
+      const { serializeTranscript } = await import('../shared/transcript.js');
+      const text = serializeTranscript(result.segments, { time: true, brackets: true });
       const temporary = path.join(directory, 'transcript.txt.tmp');
       await fs.writeFile(temporary, '\ufeff' + text, 'utf8');
-      await fs.rename(temporary, path.join(directory, 'transcript.txt'));
-      return this.saveNote({ ...note, done: true, status: 'done', segments: result.segments,
+      await replaceFile(temporary, path.join(directory, 'transcript.txt'));
+      return this.saveNote({ ...note, done: true, status: result.diarization?.status === 'failed' ? 'partial' : result.diarization?.status === 'pending' ? 'transcribing' : 'done', diarization: result.diarization || { status: 'done' }, segments: result.segments,
         seconds: result.seconds, duration: duration(result.seconds), transcriptionError: '',
         transcription: { model: result.model, device: result.device, computeType: result.compute_type, language: result.language, completedAt: new Date().toISOString() } });
     });

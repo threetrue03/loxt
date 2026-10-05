@@ -2,7 +2,7 @@
 import ctypes
 from ctypes import wintypes
 
-LABELS = {"small": "최적화", "large-v3-turbo": "표준", "large-v3": "고성능"}
+LABELS = {"small": "저성능", "large-v3-turbo": "표준", "large-v3": "고성능"}
 
 
 class InstallerProgress:
@@ -44,7 +44,7 @@ class InstallerProgress:
         if kind == 'engine-start':
             self.stage = 'engine'
             self.component = data.get('component', 'engine')
-            self._set(1800, '전체 설치: 3/5단계 · 전사 환경 준비 중')
+            self._set(1800, '전체 설치: 3/5단계 · 변환 환경 준비 중')
             self._set(1801, '1. 앱과 모델 파일 준비 완료\r\n2. 전사 엔진·실행 라이브러리 준비 중\r\n3. 실제 모델 실행 검사 대기')
             self._set(1802, data['message'])
             self._set(1804, '인터넷 연결과 여유 공간이 필요합니다. 기존 설치 파일은 재사용합니다.')
@@ -58,7 +58,7 @@ class InstallerProgress:
             self._set(1803, 0)
             return
         if kind == 'model-ready':
-            self._set(1804, f"{LABELS.get(data['model'], data['model'])} 전사 준비 완료 · {data['device']} / {data['compute_type']}")
+            self._set(1804, f"{LABELS.get(data['model'], data['model'])} 변환 준비 완료 · {data['device']} / {data['compute_type']}")
             self._set(1803, 100)
             return
         if kind == 'environment-ready':
@@ -92,4 +92,4 @@ class InstallerProgress:
             self._set(1804, f"{LABELS[data['model']]} 모델 설치 완료 · 파일 무결성 확인 완료")
             self._set(1803, 100)
         elif kind == "error":
-            self._set(1804, f"전사 준비 미완료 · {data.get('message', '')}"[:400])
+            self._set(1804, f"변환 준비 미완료 · {data.get('message', '')}"[:400])

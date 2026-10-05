@@ -12,6 +12,9 @@ const { LiveEngine } = require('./live-engine.cjs');
 const { SystemAudio } = require('./system-audio.cjs');
 const { YouTubeImports, youtubeUrl } = require('./youtube.cjs');
 const { Appearance } = require('./appearance.cjs');
+const { WorkspacePreferences } = require('./workspace-preferences.cjs');
+const { SettingsSupport, diagnosticInfo } = require('./settings-support.cjs');
+const { ModelActions } = require('./model-actions.cjs');
 
 nativeTheme.themeSource = 'dark';
 // Keep the existing library and models through the LOXT display-name migration.
@@ -31,6 +34,8 @@ let live;
 let systemAudio;
 let youtube;
 let appearance;
+let preferences, settingsSupport, modelActions;
+let lastSettingsNotice = '';
 let systemAudioAllowed = false;
 let blocker = null;
 let microphoneAllowed = false;
@@ -134,7 +139,49 @@ function refreshBlocker() {
   const active = library.sessions.size || youtube?.hasJobs || live?.busy || conversions?.hasJobs || ['prepare', 'transcribe', 'download'].includes(transcriber?.operation);
   if (active && blocker === null) blocker = powerSaveBlocker.start('prevent-app-suspension');
   if (!active && blocker !== null) { powerSaveBlocker.stop(blocker); blocker = null; }
+  publishSettings();
 }
+function modelLockReason() {
+  if (library?.sessions.size) return '녹음을 마친 뒤 모델을 변경할 수 있어요.';
+  if (live?.busy) return 'Live 작업을 마치거나 취소한 뒤 모델을 변경할 수 있어요.';
+  if (conversions?.hasJobs) return '변환 작업을 마치거나 취소한 뒤 모델을 변경할 수 있어요.';
+  if (transcriber?.busy) return '현재 준비·모델 작업을 마친 뒤 변경할 수 있어요.';
+  return '';
+}
+function settingsState() { return { ...modelActions?.snapshot(), lockReason: modelLockReason() }; }
+function publishSettings() {
+  const state = settingsState(), text = JSON.stringify(state);
+  if (text === lastSettingsNotice) return;
+  lastSettingsNotice = text;
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('settings:changed', state);
+}
+handle('preferences:get', () => preferences.snapshot());
+handle('preferences:migrate', legacy => preferences.migrate(legacy));
+handle('preferences:set', async payload => {
+  if (Object.hasOwn(payload?.change || {}, 'model')) {
+    requireNoConversions();
+    const model = (await transcriber.modelList()).find(item => item.id === payload.change.model);
+    if (!model?.downloaded) throw new Error('설치된 모델을 선택해 주세요.');
+    requireNoConversions();
+    return modelActions.run('default', model.id, () => preferences.set(payload.mode, payload.change), payload.mode);
+  }
+  return preferences.set(payload?.mode, payload?.change);
+});
+handle('settings:state', () => settingsState());
+handle('settings:verify', model => { requireNoConversions(); return modelActions.run('verify', model, async () => { await transcriber.configure({ model, device: 'auto' }, { persist: false }); return transcriber.prepare(); }); });
+handle('settings:storage', force => settingsSupport.storage(Boolean(force)));
+handle('settings:location', async payload => {
+  const location = settingsSupport.locations()[payload?.id];
+  if (!location) throw new Error('저장 위치를 확인해 주세요.');
+  if (payload.copy) { clipboard.writeText(location); return; }
+  const error = await shell.openPath(location); if (error) throw new Error('저장 폴더를 열지 못했습니다. 설치 상태와 폴더 접근 권한을 확인해 주세요.');
+});
+handle('settings:log', async () => { const error = await shell.openPath(await settingsSupport.existingLog()); if (error) throw new Error('로그 파일을 열지 못했습니다. 파일 접근 권한을 확인해 주세요.'); });
+handle('settings:diagnostics', () => { clipboard.writeText(diagnosticInfo(app.getVersion(), conversions.snapshot(), preferences.snapshot())); });
+handle('settings:link', async id => {
+  const urls = { releases: 'https://github.com/threetrue03/loxt/releases', changes: 'https://github.com/threetrue03/loxt/releases', license: 'https://github.com/threetrue03/loxt/blob/main/LICENSE', notices: 'https://github.com/threetrue03/loxt/blob/main/build/THIRD-PARTY-NOTICES.md' };
+  if (!urls[id]) throw new Error('링크를 확인해 주세요.'); await shell.openExternal(urls[id]);
+});
 // This read-only startup value is available before the renderer's first frame.
 ipcMain.on('appearance:initial', event => { event.returnValue = event.sender === mainWindow?.webContents ? appearance?.theme || 'dark' : 'dark'; });
 handle('appearance:get', () => appearance.snapshot());
@@ -148,36 +195,57 @@ handle('appearance:set', async theme => {
   return state;
 });
 handle('transcription:environment', () => conversions.environment());
-function requireNoConversions() { if (live?.busy || conversions.hasJobs) throw new Error('변환 작업을 마치거나 취소한 뒤 모델을 변경해 주세요.'); }
+function requireNoConversions() { const reason = modelLockReason(); if (reason || modelActions?.pending) throw new Error(reason || '현재 모델 작업을 마친 뒤 다시 시도해 주세요.'); }
 handle('transcription:prepare', () => { requireNoConversions(); return transcriber.prepare(); });
 handle('transcription:start', payload => conversions.enqueue(payload));
 handle('transcription:cancel', id => conversions.cancel(id));
+handle('transcription:retry-speakers', payload => { requireNoConversions(); return transcriber.retrySpeakers(payload.id, workspaceLibraries.get(payload.workspace)); });
 handle('transcription:configure', value => { requireNoConversions(); return transcriber.configure(value); });
-handle('transcription:delete-model', name => { requireNoConversions(); return transcriber.deleteModel(name); });
-handle('transcription:install-models', names => { requireNoConversions(); return transcriber.installModels(names); });
+handle('transcription:delete-model', name => { requireNoConversions(); return modelActions.run('delete', name, () => transcriber.deleteModel(name)); });
+handle('transcription:install-models', names => { requireNoConversions(); return modelActions.run('install', Array.isArray(names) ? names[0] : 'models', () => transcriber.installModels(names)); });
 handle('transcription:import-model', async () => {
-  if (live?.busy || transcriber.busy || conversions.hasJobs) throw new Error('현재 작업을 마친 뒤 모델을 불러와 주세요.');
-  const result = await dialog.showOpenDialog(mainWindow, { title: '외부 모델 불러오기', properties: ['openDirectory'] });
-  if (result.canceled || !result.filePaths.length) return { canceled: true };
   requireNoConversions();
-  return transcriber.importModel(result.filePaths[0]);
+  return modelActions.run('import', 'import', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, { title: '외부 모델 불러오기', properties: ['openDirectory'] });
+    if (result.canceled || !result.filePaths.length) return { canceled: true };
+    const reason = modelLockReason(); if (reason) throw new Error(reason);
+    return transcriber.importModel(result.filePaths[0]);
+  });
 });
 handle('library:list', () => library.list());
 handle('live:state', () => live.snapshot());
 handle('system-audio:start', () => { if (!systemAudioAllowed) throw new Error('컴퓨터 소리 녹음 권한을 먼저 요청해 주세요.'); return systemAudio.start(); });
+handle('system-audio:cancel-pending', () => systemAudio.cancelPending());
 handle('system-audio:stop', id => systemAudio.stop(id));
 handle('live:prepare', options => live.prepare(options));
 handle('live:start', options => live.start(options));
 handle('live:append', payload => live.append(payload));
 handle('live:pause', payload => live.pause(payload?.id, Boolean(payload?.paused)));
 handle('live:finish', id => live.finish(id));
+const liveImportFailures = new Map();
+async function importLiveFiles(store, files, folder) {
+  const notes = [], errors = [], failed = [];
+  for (const filename of files) {
+    try { notes.push((await store.importAudio(filename, folder)).note); }
+    catch (error) { failed.push(filename); errors.push({ filename: path.basename(filename), message: error.message }); }
+  }
+  const batch = failed.length ? require('node:crypto').randomUUID() : null;
+  if (batch) { if (liveImportFailures.size >= 20) liveImportFailures.delete(liveImportFailures.keys().next().value); liveImportFailures.set(batch, { files: failed, folder }); }
+  return { notes, errors, batch, library: await store.list() };
+}
 handle('workspace:library', payload => {
   if (payload?.workspace !== 'live') throw new Error('지원하지 않는 워크스페이스입니다.');
   const store = workspaceLibraries.get(payload?.workspace);
   if (live?.busy && (payload?.id === live.state.id || payload?.ids?.includes(live.state.id)) && ['update-note', 'move-notes', 'restore-trash', 'delete-trash'].includes(payload?.action)) throw new Error('Live 녹음을 종료한 뒤 기록을 변경해 주세요.');
   switch (payload?.action) {
     case 'list': return store.list();
-    case 'import': return dialog.showOpenDialog(mainWindow, { properties: ['openFile', 'multiSelections'], filters: [{ name: '오디오', extensions: ['wav','mp3','m4a','webm','ogg','flac','mp4'] }] }).then(async result => { if (result.canceled) return { canceled: true }; const imported = []; for (const filename of result.filePaths) imported.push((await store.importAudio(filename, payload.folder || '')).note); return { notes: imported, library: await store.list() }; });
+    case 'import': return dialog.showOpenDialog(mainWindow, { properties: ['openFile', 'multiSelections'], filters: [{ name: '오디오', extensions: ['wav','mp3','m4a','webm','ogg','flac','mp4'] }] }).then(result => result.canceled ? { canceled: true } : importLiveFiles(store, result.filePaths, payload.folder || ''));
+    case 'retry-import': {
+      const pending = liveImportFailures.get(payload.batch);
+      if (!pending) throw new Error('재시도할 파일이 없습니다.');
+      liveImportFailures.delete(payload.batch);
+      return importLiveFiles(store, pending.files, pending.folder);
+    }
     case 'create-folder': return store.createFolder({ name: payload.name, parent: payload.parent });
     case 'rename-folder': return store.renameFolder({ folder: payload.folder, name: payload.name });
     case 'delete-folder': return store.deleteFolder(payload.folder);
@@ -185,7 +253,7 @@ handle('workspace:library', payload => {
     case 'move-notes': return store.moveNotes({ ids: payload.ids, folder: payload.folder });
     case 'restore-trash': return store.restoreTrash(payload.ids);
     case 'delete-trash': return store.deleteTrash(payload.ids);
-    case 'copy': return store.list().then(data => { const note = data.notes.find(note => note.id === payload.id); if (!note?.done) throw new Error('복사할 스크립트가 없습니다.'); clipboard.writeText(note.segments.map(segment => `${segment.speaker ? `[${segment.speaker}] ` : ''}${segment.text}`).join('\n\n')); });
+    case 'copy': return store.list().then(async data => { const note = data.notes.find(note => note.id === payload.id); if (!note?.done) throw new Error('복사할 스크립트가 없습니다.'); clipboard.writeText((await import('../shared/transcript.js')).serializeTranscript(note.segments)); });
     case 'open': return shell.openPath(store.root);
     default: throw new Error('지원하지 않는 보관함 작업입니다.');
   }
@@ -205,7 +273,7 @@ handle('library:delete-trash', async ids => {
 handle('transcript:copy', async id => {
   const note = (await library.list()).notes.find(note => note.id === id);
   if (!note?.done || ['queued', 'transcribing'].includes(note.status)) throw new Error('변환이 끝난 스크립트만 복사할 수 있습니다.');
-  clipboard.writeText(note.segments.map(segment => `${segment.speaker ? `[${segment.speaker}] ` : ''}${segment.text}`).join('\n\n'));
+  clipboard.writeText((await import('../shared/transcript.js')).serializeTranscript(note.segments));
   return true;
 });
 handle('library:update-note', payload => library.updateNote(payload?.id, payload?.changes || {}));
@@ -284,6 +352,9 @@ ipcMain.handle('transcript:export', async (event, payload) => {
 app.whenReady().then(() => {
   if (!singleton) return;
   appearance = new Appearance(path.join(app.getPath('userData'), 'appearance.json'));
+  preferences = new WorkspacePreferences(app.getPath('userData'), value => mainWindow?.webContents.send('preferences:changed', value));
+  settingsSupport = new SettingsSupport(app.getPath('userData'));
+  modelActions = new ModelActions(app.getPath('userData'), publishSettings);
   nativeTheme.themeSource = appearance.theme;
   workspaceLibraries = new WorkspaceLibraries(app.getPath('userData'));
   library = workspaceLibraries.get('work');
@@ -298,6 +369,8 @@ app.whenReady().then(() => {
     refreshBlocker();
   });
   conversions.liveLibrary = workspaceLibraries.live;
+  conversions.defaults = workspace => preferences.snapshot()[workspace].model;
+  for (const workspace of ['work', 'live']) workspaceLibraries.get(workspace).onChange = revision => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('library:changed', { workspace, revision }); };
   youtube = new YouTubeImports({ root: path.join(app.getPath('userData'), 'youtube-imports'), executable: app.isPackaged ? path.join(process.resourcesPath, 'youtube', 'yt-dlp.exe') : path.join(__dirname, '../.runtime/youtube/yt-dlp.exe'), library, queue: conversions, notify: state => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('youtube:state', state);
     refreshBlocker();
@@ -306,7 +379,8 @@ app.whenReady().then(() => {
   live = new LiveEngine(transcriber, conversions, workspaceLibraries.live, state => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('live:state', state);
     refreshBlocker();
-  });
+  }, event => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('live:meter', event); });
+  live.notifyPatch = patch => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('live:patch', patch); };
   protocol.handle('sorinote-audio', audioResponse);
   createWindow();
 });

@@ -12,11 +12,24 @@ await page.evaluate(()=>window.getSelection()?.removeAllRanges());
 await page.screenshot({path:new URL('hero-desktop.png',root).pathname.replace(/^\/([A-Z]:)/,'$1')});
 await page.screenshot({path:new URL('desktop.png',root).pathname.replace(/^\/([A-Z]:)/,'$1'),fullPage:true});
 await page.locator('#workspaces').screenshot({path:new URL('workspaces-desktop.png',root).pathname.replace(/^\/([A-Z]:)/,'$1')});await page.locator('.live-workflow').screenshot({path:new URL('live-desktop.png',root).pathname.replace(/^\/([A-Z]:)/,'$1')});await page.getByText('NVIDIA GPU가 없어도 사용할 수 있나요?',{exact:true}).click();assert.ok(await page.locator('details[open]').count());
+const themes=page.getByRole('group',{name:'앱 테마 미리보기',exact:true});
+await themes.getByRole('button',{name:'라이트 테마',exact:true}).click();
+assert.equal(await themes.getByRole('button',{name:'라이트 테마',exact:true}).getAttribute('aria-pressed'),'true');
+assert.match(await page.locator('#theme-preview img').getAttribute('src'),/light-home\.png$/);
+await page.locator('#theme-preview img').evaluate(image=>image.decode());
+await page.locator('.themes').screenshot({path:new URL('themes-light-desktop.png',root).pathname.replace(/^\/([A-Z]:)/,'$1')});
+await themes.getByRole('button',{name:'다크 테마',exact:true}).click();
+assert.equal(await themes.getByRole('button',{name:'라이트 테마',exact:true}).getAttribute('aria-pressed'),'false');
+assert.match(await page.locator('#theme-preview img').getAttribute('src'),/\/home\.png$/);
+await page.getByText('YouTube 링크도 스크립트로 만들 수 있나요?',{exact:true}).click();
+await page.getByText('Shorts·재생목록·실시간 방송·비공개·로그인이 필요한 영상은 지원하지 않습니다.',{exact:false}).waitFor();
+await page.getByText('테마는 어떻게 바꾸나요?',{exact:true}).click();
+await page.getByText('설정 → 일반 → 테마에서 다크 테마 또는 라이트 테마를 선택하세요.',{exact:false}).waitFor();
 for(const width of [390,768,1440]){await page.setViewportSize({width,height:900});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));}
 await page.setViewportSize({width:390,height:844});await page.evaluate(()=>{document.activeElement?.blur();window.getSelection()?.removeAllRanges();});await page.screenshot({path:new URL('mobile.png',root).pathname.replace(/^\/([A-Z]:)/,'$1'),fullPage:true});
 const expected=download;
 const downloads=page.getByRole('link',{name:'Windows용 다운로드',exact:true});assert.equal(await downloads.count(),2);for(const link of await downloads.all())assert.equal(await link.getAttribute('href'),expected);assert.equal(await page.locator('.release').filter({hasText:`v${version}`}).count(),2);assert.equal(await page.locator('select').count(),0);
 await page.getByText('컴퓨터에서 재생되는 소리도 녹음할 수 있나요?',{exact:true}).click();await page.getByText('네. 녹음 시작 버튼 옆의 장치 메뉴에서 컴퓨터 소리를 선택하세요.',{exact:false}).waitFor();
-const captures=await page.request.get(new URL('assets/screenshots.json',base).href);const manifest=await captures.json();assert.equal(manifest.version,version);assert.equal(manifest.examples,true);assert.equal(manifest.images.length,11);await page.getByText('녹음을 중단해도 다시 이어서 녹음할 수 있나요?',{exact:true}).click();await page.getByText('네. Work의 녹음 중단은 일시정지입니다.',{exact:false}).waitFor();assert.equal(manifest.liveInference,false);assert.ok(manifest.images.some(image=>image.scenario==='work-home'));assert.ok(manifest.images.some(image=>image.scenario==='live-scripted-example'));await page.getByRole('heading',{name:/파일을 정리할 때는 Work/}).waitFor();await page.getByText('Work와 Live는 어떻게 다른가요?',{exact:true}).click();await page.getByText('각 모드의 녹음·폴더·최근 열람 이력은 따로 보관됩니다.',{exact:false}).waitFor();assert.equal((await page.locator('body').innerText()).includes('상단 로고를 누르면 홈으로'),false);assert.deepEqual(errors,[]);console.log('PASS: desktop/mobile layout, real app images, FAQ, current release download links and system audio FAQ, no runtime errors');
+const captures=await page.request.get(new URL('assets/screenshots.json',base).href);const manifest=await captures.json();assert.equal(manifest.version,version);assert.equal(manifest.examples,true);assert.equal(manifest.images.length,15);await page.getByText('녹음을 중단해도 다시 이어서 녹음할 수 있나요?',{exact:true}).click();await page.getByText('네. Work의 녹음 중단은 일시정지입니다.',{exact:false}).waitFor();assert.equal(manifest.liveInference,false);for(const scenario of ['work-home','live-scripted-example','work-home-light','speaker-script-light','light-theme-settings','youtube-link-dialog'])assert.ok(manifest.images.some(image=>image.scenario===scenario));await page.getByRole('heading',{name:/파일을 정리할 때는 Work/}).waitFor();await page.getByText('Work와 Live는 어떻게 다른가요?',{exact:true}).click();await page.getByText('각 모드의 녹음·폴더·최근 열람 이력은 따로 보관됩니다.',{exact:false}).waitFor();assert.equal((await page.locator('body').innerText()).includes('상단 로고를 누르면 홈으로'),false);assert.deepEqual(errors,[]);console.log('PASS: desktop/mobile layout, 1.10.0 app images, theme preview switching, YouTube/theme FAQ, release download links, no runtime errors');
 }finally{await browser.close();}
 

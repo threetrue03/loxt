@@ -214,7 +214,7 @@ def reach_preparation(*args):
     wait(lambda: any(label.startswith('앱 삭제') for _, label in controls(process.pid)))
     labels = [label for _, label in controls(process.pid)]
     assert any(label.startswith('앱 삭제') for label in labels)
-    assert not any(label.startswith(('모델 추가 설치', '설치된 소리노트 실행')) for label in labels)
+    assert not any(label.startswith(('모델 추가 설치', '설치된 LOXT 실행')) for label in labels)
     next_page(hwnd)
     hwnd = page('저성능 (small)')
     next_page(hwnd)

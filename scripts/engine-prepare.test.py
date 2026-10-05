@@ -10,6 +10,32 @@ import engine_prepare as engine
 
 
 class PreparationTests(unittest.TestCase):
+    def test_core_preparation_succeeds_without_optional_speaker_engine(self):
+        test_root = Path(__file__).resolve().parents[1] / 'test-results'
+        with tempfile.TemporaryDirectory(dir=test_root, prefix='prepare-core-') as temporary:
+            root = Path(temporary)
+            base = root / 'python-base-3.13.16'
+            base.mkdir()
+            (base / 'sorinote-runtime.json').write_text('{}')
+            calls = []
+            def run(python, args, notify, protocol=False):
+                calls.append(args)
+                if any('auxiliary_prepare.py' in str(arg) for arg in args):
+                    raise RuntimeError('speaker engine unavailable')
+                if 'probe' in args:
+                    return [('probe', {'compute_types': ['int8']})]
+                if 'prepare' in args:
+                    return [('prepared', {})]
+                return []
+            events = []
+            with patch.object(engine, 'hardware', return_value=None), patch.object(engine, 'run', run):
+                engine.prepare(root, root, ['small'], 'cpu', lambda kind, **data: events.append(kind), models_verified=True, prepare_auxiliary=False)
+            self.assertIn('environment-ready', events)
+            self.assertFalse(any('auxiliary_prepare.py' in str(arg) for args in calls for arg in args))
+            with patch.object(engine, 'hardware', return_value=None), patch.object(engine, 'run', run):
+                with self.assertRaisesRegex(RuntimeError, 'speaker engine unavailable'):
+                    engine.prepare(root, root, ['small'], 'cpu', lambda *args, **kwargs: None, models_verified=True)
+
     def test_repair_also_validates_installed_active_model_without_changing_selection(self):
         test_root = Path(__file__).resolve().parents[1] / 'test-results'
         with tempfile.TemporaryDirectory(dir=test_root, prefix='prepare-active-') as temporary:
@@ -37,6 +63,31 @@ class PreparationTests(unittest.TestCase):
             self.assertEqual(final['selected_model'], 'medium')
             self.assertEqual(json.loads((root / 'settings.json').read_text()), original)
             self.assertIn('medium:cpu:int8', json.loads((root / 'prepared.json').read_text())['validations'])
+
+    def test_transient_validates_job_model_without_changing_saved_model(self):
+        test_root = Path(__file__).resolve().parents[1] / 'test-results'
+        with tempfile.TemporaryDirectory(dir=test_root, prefix='prepare-transient-') as temporary:
+            root = Path(temporary)
+            base = root / 'python-base-3.13.16'
+            base.mkdir()
+            (base / 'sorinote-runtime.json').write_text('{}')
+            original = b'{"model":"medium","device":"cpu"}'
+            (root / 'settings.json').write_bytes(original)
+            calls, events = [], []
+            def run(python, args, notify, protocol=False):
+                calls.append(args)
+                if 'probe' in args:
+                    return [('probe', {'compute_types': ['int8']})]
+                if 'prepare' in args:
+                    return [('prepared', {})]
+                return []
+            with patch.object(engine, 'hardware', return_value=None), patch.object(engine, 'run', run):
+                engine.prepare(root, root, ['small'], 'auto', lambda kind, **data: events.append((kind, data)), models_verified=True, prepare_auxiliary=False, transient=True)
+            final = next(data for kind, data in events if kind == 'environment-ready')
+            self.assertEqual(final['selected_model'], 'small')
+            self.assertTrue(final['selected_ready'])
+            self.assertEqual((root / 'settings.json').read_bytes(), original)
+            self.assertFalse(any('medium' in args for args in calls))
 
     def test_selection_preserves_existing_and_never_falls_back_from_cuda(self):
         gpu = {'name': 'RTX test', 'memory': 6144}

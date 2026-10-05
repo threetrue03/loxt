@@ -23,7 +23,7 @@ const executablePath=process.argv.slice(2).find(argument=>argument.endsWith('.ex
 const app=await electron.launch({...(executablePath?{executablePath:path.resolve(executablePath)}:{}),args:[...(executablePath?[]:['.']),'--use-fake-device-for-media-stream',`--use-file-for-fake-audio-capture=${source}`],env});
 await app.evaluate(({dialog})=>{dialog.showMessageBox=async()=>({response:0});});
 try {
-  const page=await app.firstWindow();page.setDefaultTimeout(15000);const errors=[];page.on('pageerror',error=>errors.push(error.message));
+  const page=await app.firstWindow();await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].show());page.setDefaultTimeout(15000);const errors=[];page.on('pageerror',error=>errors.push(error.message));
   await page.getByRole('heading',{name:'홈',exact:true}).waitFor();
   const saved=async(check)=>{for(let i=0;i<150;i++){const value=await page.evaluate(()=>window.desktop.getLibrary());if(check(value))return value;await page.waitForTimeout(100);}throw Error('Library change timed out');};
   const capture=async name=>{await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));await page.waitForTimeout(100);const bytes=await app.evaluate(async({BrowserWindow})=>(await BrowserWindow.getAllWindows()[0].webContents.capturePage(undefined,{stayHidden:true,stayAwake:true})).toPNG().toString('base64'));await writeFile(path.join(data,name),Buffer.from(bytes,'base64'));};

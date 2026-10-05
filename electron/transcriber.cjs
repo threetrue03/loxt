@@ -1,3 +1,4 @@
+const { WorkWorker } = require('./work-worker.cjs');
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const { spawn } = require('node:child_process');
@@ -23,6 +24,7 @@ class Transcriber {
     this.runtime = runtime || path.join(resources, '../python-runtime');
     this.runtimeRequired = runtimeRequired;
     this.auxiliary = new Auxiliary(this);
+    this.workWorker = new WorkWorker(this);
     this.library = library;
     this.onChange = onChange;
     this.python = path.join(root, 'venv', 'Scripts', 'python.exe');
@@ -32,7 +34,7 @@ class Transcriber {
     this.requestId = null;
     this.cancelled = false;
     this.preferences = null;
-    this.state = { ready: false, stage: 'idle', message: '변환 환경을 확인해 주세요.', error: '', progress: null, gpu: null, python: '', model: 'medium', devicePreference: 'auto', device: 'cuda', computeType: 'int8_float16', ram: os.totalmem(), models: MODELS, recommended: null, task: null };
+    this.state = { ready: false, stage: 'idle', message: '변환 환경을 확인해 주세요.', error: '', progress: null, gpu: null, python: '', model: 'medium', devicePreference: 'auto', device: null, hardwareChecked: false, computeType: 'int8_float16', ram: os.totalmem(), models: MODELS, modelsChecked: false, recommended: null, task: null };
   }
   snapshot() { return structuredClone({ ...this.state, busy: this.busy, operation: this.operation }); }
   update(changes) {
@@ -42,6 +44,7 @@ class Transcriber {
   get busy() { return Boolean(this.operation || this.requestId); }
   run(command, args, onLine = () => {}, timeout = 0) {
     if (this.cancelled) return Promise.reject(new Error('cancelled'));
+    if (args[1] === 'transcribe' && path.basename(args[0]) === 'worker.py') return this.workWorker.run(command, args, onLine);
     return new Promise((resolve, reject) => {
       const child = spawn(command, args, { windowsHide: true, shell: false,
         env: { ...process.env, PYTHONUTF8: '1', PYTHONUNBUFFERED: '1', HF_HOME: path.join(this.root, 'hf-cache'), HF_HUB_DISABLE_TELEMETRY: '1', HF_HUB_DISABLE_IMPLICIT_TOKEN: '1', HF_HUB_DOWNLOAD_TIMEOUT: '60', HF_HUB_DISABLE_PROGRESS_BARS: '0' } });
@@ -113,6 +116,7 @@ class Transcriber {
   }
   async importModel(directory) {
     if (this.busy) throw new Error('현재 작업을 마친 뒤 모델을 불러와 주세요.');
+    await this.releaseWorkWorker();
     this.operation = 'import'; this.update({ stage: 'loading', message: '외부 모델 불러오는 중', error: '' });
     const id = `external-${randomUUID()}`;
     const target = path.resolve(this.root, 'models', id);
@@ -141,6 +145,8 @@ class Transcriber {
     return this.detect();
   }
   async modelList() {
+    let validations = {};
+    try { validations = JSON.parse(await fs.readFile(path.join(this.root, 'prepared.json'), 'utf8')).validations || {}; } catch {}
     return Promise.all((await this.catalogue()).map(async model => {
       const directory = path.join(this.root, 'models', model.id);
       let downloaded = false, bytes = 0, partial = false;
@@ -149,18 +155,19 @@ class Transcriber {
         await Promise.all(['config.json', 'tokenizer.json'].map(name => fs.access(path.join(directory, name))));
         downloaded = bytes > 0;
       } catch { try { partial = (await fs.stat(path.join(directory, 'model.bin.part'))).size > 0; } catch { /* no download */ } }
-      return { ...model, downloaded, bytes, partial };
+      return { ...model, downloaded, bytes, partial, validated: downloaded && Object.keys(validations).some(key => key.startsWith(`${model.id}:${this.state.device}:`)) };
     }));
   }
   async configure(value, { persist = true } = {}) {
     if (this.busy) throw new Error('작업을 마치거나 취소한 뒤 설정을 변경해 주세요.');
     this.operation = 'configure'; this.update({});
-    try { const next = validateSettings(value, await this.catalogue()); if (persist) await this.saveJson(path.join(this.root, 'settings.json'), next); this.preferences = next; }
+    try { const next = validateSettings(value, await this.catalogue()); if (next.model !== this.state.model) await this.releaseWorkWorker(); if (persist) await this.saveJson(path.join(this.root, 'settings.json'), next); this.preferences = next; }
     finally { this.operation = null; this.update({}); }
     return this.detect();
   }
   async deleteModel(name) {
     if (this.busy) throw new Error('작업 중에는 모델을 삭제할 수 없습니다.');
+    await this.releaseWorkWorker();
     this.operation = 'delete'; this.update({});
     try {
       const catalog = await this.catalogue();
@@ -183,11 +190,12 @@ class Transcriber {
   validationKey() { return `${this.state.model}:${this.state.device}:${this.state.computeType}`; }
   async installModels(names) {
     if (this.busy) throw new Error('작업을 마치거나 취소한 뒤 모델을 설치해 주세요.');
+    await this.releaseWorkWorker();
     if (!Array.isArray(names) || !names.length || names.length > 3 || names.some(name => !MODELS.some(model => model.preset && model.id === name))) throw new Error('설치할 모델을 확인해 주세요.');
     const models = [...new Set(names)];
     this.operation = 'download'; this.cancelled = false;
     this.update({ stage: 'downloading', error: '', progress: null, message: '모델 설치 중', download: { model: models[0], index: 1, total: models.length } });
-    let failure = null;
+    let failure = null, wasCancelled = false;
     try {
       const python = await this.basePython();
       let completed = false;
@@ -203,13 +211,13 @@ class Transcriber {
       if (!completed) throw new Error('모델 설치를 확인하지 못했습니다. 다시 시도해 주세요.');
     } catch (error) { failure = this.cancelled ? null : failure || friendlyError(error.message); }
     finally {
-      const cancelled = this.cancelled;
+      const cancelled = this.cancelled; wasCancelled = cancelled;
       this.operation = null;
       await this.detect();
       this.update({ stage: 'idle', progress: null, download: null, error: failure || '', message: cancelled ? '변환 준비를 취소했습니다. 다음 준비에서 설치된 파일을 재사용합니다.' : failure ? '변환 준비 미완료 · 다시 시도해 주세요.' : '설치한 모델의 변환 준비 완료 · 현재 모델 선택은 유지합니다.' });
       this.update({});
     }
-    return this.snapshot();
+    return { ...this.snapshot(), canceled: wasCancelled };
   }
   async detect(internal = false) {
     if (this.busy && !internal) return this.snapshot();
@@ -232,7 +240,7 @@ class Transcriber {
       }
       const device = this.preferences.device === 'auto' ? (gpu ? 'cuda' : 'cpu') : this.preferences.device;
       this.modelDir = path.join(this.root, 'models', this.preferences.model);
-      this.update({ gpu, recommended, model: this.preferences.model, devicePreference: this.preferences.device, device, models: await this.modelList() });
+      this.update({ gpu, hardwareChecked: true, recommended, model: this.preferences.model, devicePreference: this.preferences.device, device });
       let ready = false, python = '';
       try {
         if (device === 'cuda' && !gpu) throw new Error('NVIDIA GPU를 찾지 못했습니다. CPU 또는 자동 선택으로 변경해 주세요.');
@@ -241,8 +249,9 @@ class Transcriber {
         const prepared = JSON.parse(await fs.readFile(path.join(this.root, 'prepared.json'), 'utf8'));
         ready = ready && (prepared.validations?.[this.validationKey()] || (prepared.model === 'medium' && this.validationKey() === 'medium:cuda:int8_float16'));
       } catch { ready = false; }
-      this.update({ ready: Boolean(ready), python, stage: 'idle', message: ready ? `${device === 'cuda' ? 'GPU' : 'CPU'} 변환 준비 완료` : device === 'cuda' && !gpu ? 'NVIDIA GPU가 없습니다. CPU 또는 자동 선택으로 변경해 주세요.' : '변환 준비가 필요합니다.' });
-    } finally { this.operation = null; this.update({}); }
+      this.update({ ready: Boolean(ready), python, models: await this.modelList(), modelsChecked: true, stage: 'idle', message: ready ? `${device === 'cuda' ? 'GPU' : 'CPU'} 변환 준비 완료` : device === 'cuda' && !gpu ? 'NVIDIA GPU가 없습니다. CPU 또는 자동 선택으로 변경해 주세요.' : '변환 준비가 필요합니다.' });
+    } catch (error) { this.update({ stage: 'idle', modelsChecked: false, error: friendlyError(error.message) }); throw error; }
+    finally { this.operation = null; this.update({}); }
     return this.snapshot();
   }
   async prepare(internal = false) {
@@ -250,10 +259,11 @@ class Transcriber {
     this.operation = 'prepare'; if (!internal) this.cancelled = false;
     this.update({ ready: false, stage: 'installing', error: '', progress: null, message: '앱 전용 Python 환경 준비 중' });
     try {
+      await this.releaseWorkWorker();
       if (this.state.device === 'cuda' && !this.state.gpu) throw new Error('NVIDIA GPU를 찾지 못했습니다. CPU 또는 자동 선택으로 변경해 주세요.');
       const python = await this.basePython();
       let prepared = false;
-      await this.run(python, [path.join(this.resources, 'engine_prepare.py'), '--root', this.root, '--runtime', path.dirname(python), '--models', this.state.model, '--device', this.state.devicePreference, '--parent-pid', String(process.pid)], line => {
+      await this.run(python, [path.join(this.resources, 'engine_prepare.py'), '--skip-auxiliary', '--transient', '--root', this.root, '--runtime', path.dirname(python), '--models', this.state.model, '--device', this.state.devicePreference, '--parent-pid', String(process.pid)], line => {
         let event; try { event = JSON.parse(line); } catch { return; }
         if (event.type === 'engine-start') this.update({ stage: 'installing', message: event.message, progress: null });
         if (event.type === 'model-start') this.update({ stage: 'downloading', message: `${event.model} 모델 준비 중`, progress: null });
@@ -265,11 +275,11 @@ class Transcriber {
       });
       if (!prepared) throw new Error('모델 실행을 확인하지 못했습니다. 다시 시도해 주세요.');
       this.update({ python: this.python });
-      this.update({ ready: true, stage: 'idle', models: await this.modelList(), message: `${this.state.device === 'cuda' ? 'GPU' : 'CPU'} 변환 준비 완료`, error: '', progress: null });
+      this.update({ ready: true, stage: 'idle', models: await this.modelList(), modelsChecked: true, message: `${this.state.device === 'cuda' ? 'GPU' : 'CPU'} 변환 준비 완료`, error: '', progress: null });
     } catch (error) {
       this.update({ stage: 'idle', ready: false, progress: null, message: this.cancelled ? '환경 준비를 취소했습니다.' : '환경 준비 실패', error: this.cancelled ? '' : (this.state.error || friendlyError(error.message)) });
     } finally { this.operation = null; this.update({}); }
-    return this.snapshot();
+    return { ...this.snapshot(), canceled: this.cancelled };
   }
   async startAutomatic(id, library = this.library) {
     if (this.busy) throw new Error('현재 작업을 마친 뒤 다시 시작해 주세요.');
@@ -298,12 +308,6 @@ class Transcriber {
       if (!this.state.ready) await this.prepare(true);
       if (this.cancelled) throw new Error('cancelled');
       if (!this.state.ready) throw new Error(this.state.error || '모델 설치를 완료하지 못했습니다. 다시 시도해 주세요.');
-      await this.auxiliary.prepare(event => {
-        if (event.type === 'phase') this.update({ stage: 'installing', message: event.message, progress: null });
-        if (event.type === 'download') this.update({ stage: 'downloading', progress: Math.min(99, Math.floor(event.current / event.total * 100)), message: '화자 모델 준비 중' });
-      }, child => { this.child = child; });
-      this.child = null;
-      if (this.cancelled) throw new Error('cancelled');
       await this.start(id, true);
     } catch (error) {
       const message = this.cancelled ? '' : friendlyError(error.message);
@@ -337,25 +341,59 @@ class Transcriber {
       });
       if (this.cancelled) throw new Error('cancelled');
       if (!result) throw new Error('변환 결과를 받지 못했습니다. 다시 시도해 주세요.');
+      this.recordExecution(result, (this.taskLibrary || this.library) === this.library ? 'work' : 'live');
+      const store = this.taskLibrary || this.library;
+      // Base conversion is committed before optional speaker analysis.
+      result.diarization = { status: 'pending' };
+      await store.completeTranscription(id, result);
       this.update({ stage: 'diarizing', message: '화자 분석 중', progress: null });
-      await this.auxiliary.prepare();
-      result.segments = await this.auxiliary.diarize(filename, result.segments, child => { this.child = child; });
+      try {
+        await this.auxiliary.prepare(undefined, child => { this.child = child; });
+        const segments = await this.auxiliary.diarize(filename, result.segments, child => { this.child = child; });
+        if (this.cancelled) throw new Error('cancelled');
+        result = { ...result, segments, diarization: { status: 'done' } };
+      } catch (error) {
+        result = { ...result, diarization: { status: 'failed', error: this.cancelled ? '화자 분석을 취소했습니다.' : friendlyError(error.message) } };
+      }
       this.child = null;
-      if (this.cancelled) throw new Error('cancelled');
       this.update({ stage: 'saving', message: '스크립트 저장 중', progress: null });
-      await (this.taskLibrary || this.library).completeTranscription(id, result);
-      this.update({ stage: 'idle', progress: null, message: '변환 완료', task: null, error: '' });
+      await store.completeTranscription(id, result);
+      this.update({ stage: 'idle', progress: null, message: result.diarization.status === 'failed' ? '스크립트 저장 완료 · 화자 분석 실패' : '변환 완료', task: null, error: '' });
     } catch (error) {
       const message = this.cancelled ? '' : this.state.error || friendlyError(error.message);
       await (this.taskLibrary || this.library).setTranscription(id, { status: this.cancelled ? 'cancelled' : 'failed', transcriptionError: message }).catch(() => {});
       this.update({ stage: 'idle', progress: null, task: null, message: this.cancelled ? '변환을 취소했습니다. 원본은 유지됩니다.' : '변환 실패', error: message });
     } finally { this.operation = null; this.taskLibrary = null; this.child = null; this.update({}); }
   }
+  recordExecution(result, mode) {
+    if (!['cuda', 'cpu'].includes(result?.device)) return;
+    const lastExecution = { mode, model: result.model, device: result.device, computeType: result.compute_type, at: new Date().toISOString() };
+    this.update({ lastExecution });
+  }
+  async retrySpeakers(id, library = this.library) {
+    if (this.busy) throw new Error('현재 작업을 마친 뒤 다시 시도해 주세요.');
+    const note = (await library.list()).notes.find(note => note.id === id);
+    if (!note?.done || note.deleted) throw new Error('화자를 분석할 스크립트가 없습니다.');
+    this.operation = 'transcribe'; this.cancelled = false; this.taskLibrary = library;
+    this.update({ stage: 'diarizing', task: { id, segments: [] }, message: '화자 분석 재시도 중' });
+    const result = { segments: note.segments, seconds: note.seconds, model: note.transcription?.model, device: note.transcription?.device, compute_type: note.transcription?.computeType, language: note.transcription?.language };
+    try {
+      const audio = await library.getAudio(id);
+      await this.auxiliary.prepare(undefined, child => { this.child = child; });
+      result.segments = await this.auxiliary.diarize(audio.filename, note.segments, child => { this.child = child; });
+      if (this.cancelled) throw new Error('화자 분석을 취소했습니다.');
+      result.diarization = { status: 'done' };
+      await library.completeTranscription(id, result);
+    } catch (error) { await library.setTranscription(id, { status: 'partial', diarization: { status: 'failed', error: friendlyError(error.message) } }); }
+    finally { this.child = null; this.operation = null; this.taskLibrary = null; this.update({ stage: 'idle', task: null, progress: null }); }
+    return this.snapshot();
+  }
+  releaseWorkWorker() { return this.workWorker.close(); }
   cancel() {
     if (!this.requestId && !['prepare', 'transcribe', 'download'].includes(this.operation)) return this.snapshot();
     // Saving an already completed result must finish atomically.
     if (this.state.stage === 'saving') return this.snapshot();
-    this.cancelled = true; if (this.child) this.kill(this.child);
+    this.cancelled = true; this.workWorker.close().catch(() => {}); if (this.child && !(this.auxiliary.children.has(this.child) && this.auxiliary.listeners.size > 1)) this.kill(this.child);
     this.update({ message: '작업을 취소하는 중…' });
     return this.snapshot();
   }
@@ -366,6 +404,6 @@ class Transcriber {
       killer.on('error', () => child.kill());
     } else child.kill();
   }
-  shutdown() { this.cancelled = true; if (this.child) this.kill(this.child); }
+  shutdown() { this.workWorker.close().catch(() => {}); this.cancelled = true; if (this.child) this.kill(this.child); }
 }
 module.exports = { Transcriber, friendlyError };

@@ -41,7 +41,10 @@ test('invalid parents, ambiguous path names and hierarchy cycles cannot corrupt 
   await library.createFolder('A'); await library.createFolder('B');
   const data = await library.list(); data.folderParents = { A: 'B', B: 'A' };
   await fs.writeFile(library.index, JSON.stringify(data));
-  await assert.rejects(new Library(root).ready, /원본 파일/);
+  const restored = new Library(root); const recovered = await restored.list();
+  assert.equal(recovered.recovery.backup, true);
+  assert.notDeepEqual(recovered.folderParents, { A: 'B', B: 'A' });
+  assert.equal(JSON.parse(await fs.readFile(recovered.recovery.archive, 'utf8')).folderParents.A, 'B');
 });
 test('renaming a folder updates descendants, recordings, trash and active sessions without moving audio', async () => {
   const { root, library } = await fixture();

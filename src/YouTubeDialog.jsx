@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useSettings } from './SettingsProvider.jsx';
 import Modal from './Modal.jsx';
 import Select from './Select.jsx';
 import { parentOf } from './FolderTree.jsx';
@@ -16,7 +17,8 @@ export default function YouTubeDialog({ folders, parents, initialFolder, environ
     return roots.includes(current) ? current : '';
   });
   const [model, setModel] = useState(null);
-  const selectedModel = model || environment?.model || 'small';
+  const { preferences } = useSettings();
+  const selectedModel = model || preferences.work.model;
   const mounted = useRef(true);
   const inspecting = useRef(false);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; if (inspecting.current) window.desktop.youtube.cancelInspect().catch(() => {}); }; }, []);
@@ -35,7 +37,7 @@ export default function YouTubeDialog({ folders, parents, initialFolder, environ
     {!video ? <form onSubmit={inspect} className="youtube-link-form"><label htmlFor="youtube-link">영상 링크</label><input id="youtube-link" type="url" required maxLength={2048} autoComplete="off" placeholder="YouTube 링크를 붙여넣으세요" value={url} disabled={working} onChange={event => { setUrl(event.target.value); setError(''); }}/><p className="hint">공개된 일반 업로드 영상의 음성을 가져옵니다.</p>{error ? <p className="error-message" role="alert">{error}</p> : null}<div className="conversion-actions"><button type="submit" className="primary" disabled={working || !url.trim()}>{working ? '영상 확인 중…' : '영상 확인'}</button></div></form> : <div className="conversion-options">
       <div className="youtube-video"><h3>{video.title}</h3><p>{video.uploader}{video.uploader ? ' · ' : ''}{formatTime(video.seconds)}</p></div>
       <h3>저장할 폴더</h3><div className="folder-choices" role="group" aria-label="저장할 폴더">{['', ...roots].map(value => <button key={value} className="secondary" aria-pressed={folder === value} disabled={working} onClick={() => setFolder(value)}>{value || '폴더 지정 안함'}</button>)}</div>
-      <div className="field-label">변환 모델</div><Select label="변환 모델" className="field-select" value={selectedModel} disabled={working || !environment} onChange={setModel} options={(environment?.models || []).filter(item => item.preset || item.downloaded || item.id === environment?.model).map(item => ({ value: item.id, label: `${item.label}${!item.downloaded ? ' · 설치 필요' : ''}`, group: item.preset ? '기본 모델' : '외부 모델' }))}/>
+      <div className="field-label">변환 모델</div><Select label="변환 모델" className="field-select" value={selectedModel} disabled={working || !environment} onChange={setModel} options={(environment?.models || []).filter(item => item.preset || item.downloaded || item.id === environment?.model).map(item => ({ value: item.id, label: `${item.label}${!item.downloaded ? ' · 설치 필요' : ''}`, group: item.external ? '외부 모델' : '기본 모델' }))}/>
       {error ? <p className="error-message" role="alert">{error}</p> : null}<div className="conversion-actions"><button className="secondary" disabled={working} onClick={() => { setVideo(null); setError(''); }}>뒤로</button><button className="primary" disabled={working || !environment} onClick={start}>{working ? '처리 중…' : '변환하기'}</button></div>
     </div>}
   </Modal>;

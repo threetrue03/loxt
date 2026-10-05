@@ -13,16 +13,18 @@ export async function openLiveInput(device, onStatus) {
 
 export async function captureLive(stream, onData, onError) {
   const context = new AudioContext({ latencyHint: 'interactive' });
-  let node, source, gain, chain = Promise.resolve(), token = 0, flushing = new Map(), failed = false;
+  let node, source, gain, chain = Promise.resolve(), token = 0, flushing = new Map(), failed = false, queuedBytes = 0;
   try {
     await context.audioWorklet.addModule(new URL('live-capture-worklet.js', document.baseURI).href);
     source = context.createMediaStreamSource(stream); node = new AudioWorkletNode(context, 'loxt-live-capture');
     gain = context.createGain(); gain.gain.value = 0;
     node.port.onmessage = ({ data }) => {
       if (data.type === 'flushed') { flushing.get(data.token)?.(); flushing.delete(data.token); return; }
-      if (data.type !== 'pcm') return;
+      if (data.type !== 'pcm' || failed) return;
       const bytes = new Uint8Array(data.samples.buffer);
-      chain = chain.then(() => onData(bytes)).catch(error => { if (!failed) { failed = true; onError(error); } });
+      queuedBytes += bytes.length;
+      if (queuedBytes > 32000 * 10) { failed = true; onError(new Error('오디오 저장이 입력 속도를 따라가지 못했습니다. 저장된 원본을 확인하고 다시 시작해 주세요.')); return; }
+      chain = chain.then(() => onData(bytes)).finally(() => { queuedBytes -= bytes.length; }).catch(error => { if (!failed) { failed = true; onError(error); } });
     };
     source.connect(node); node.connect(gain); gain.connect(context.destination); await context.resume();
     const flush = async type => {

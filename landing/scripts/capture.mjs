@@ -46,7 +46,7 @@ try{
  const goHome=async mode=>{await scope(mode).getByRole('button',{name:'홈',exact:true}).click();await scope(mode).locator('.home-page').waitFor();};
  const capture=async(name,scenario)=>{await page.evaluate(()=>document.fonts.ready);await page.locator('.toast:visible').waitFor({state:'hidden',timeout:4000});await page.evaluate(()=>document.activeElement?.blur());await page.mouse.move(1400,880);await page.waitForTimeout(350);await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));const encoded=await app.evaluate(async({BrowserWindow})=>(await BrowserWindow.getAllWindows()[0].webContents.capturePage()).toPNG().toString('base64'));const bytes=Buffer.from(encoded,'base64');await writeFile(path.join(assets,name),bytes);images.push({file:name,width:bytes.readUInt32BE(16),height:bytes.readUInt32BE(20),scenario});};
  async function openRecent(mode){await scope(mode).locator('.home-page').getByRole('button',{name:'모두 보기',exact:true}).click();for(const note of records[mode].toReversed()){await scope(mode).getByRole('button',{name:`${note.title} 열기`,exact:true}).click();await scope(mode).getByRole('region',{name:'스크립트',exact:true}).waitFor();await scope(mode).getByRole('button',{name:/녹음 목록/}).click();}await goHome(mode);}
- await scope('work').getByRole('heading',{name:'홈',exact:true}).waitFor();await openRecent('work');await capture('home.png','work-home');
+ await scope('work').getByRole('heading',{name:'홈',exact:true}).waitFor();await openRecent('work');
  await page.getByRole('button',{name:'워크스페이스 선택',exact:true}).click();await capture('workspace.png','workspace-menu');await page.keyboard.press('Escape');
  await scope('work').locator('.home-page').getByRole('button',{name:'모두 보기',exact:true}).click();await scope('work').getByRole('button',{name:'카드 보기',exact:true}).click();await capture('library.png','work-library');
  const first=records.work[0],last=records.work.at(-1);
@@ -59,6 +59,17 @@ try{
  await scope('work').getByRole('button',{name:'녹음 중단',exact:true}).click();await page.getByRole('dialog',{name:'변환하기',exact:true}).waitFor();await page.getByRole('dialog').getByRole('button',{name:'회의',exact:true}).click();await capture('conversion.png','work-paused-conversion');
  await page.getByRole('button',{name:'닫기',exact:true}).click();await capture('recording.png','work-paused-recording');await scope('work').getByRole('button',{name:'녹음 중단',exact:true}).click();await page.getByRole('button',{name:'버리기',exact:true}).click();
  await scope('work').getByRole('button',{name:'설정',exact:true}).click();await scope('work').getByRole('button',{name:'모델 보관함',exact:true}).click();await capture('models.png','model-library');await scope('work').getByRole('button',{name:/보관함으로 돌아가기/}).click();
+ await goHome('work');await scope('work').getByRole('button',{name:'YouTube 불러오기',exact:true}).click();
+ await page.getByRole('dialog',{name:'YouTube 불러오기',exact:true}).waitFor();await capture('youtube.png','youtube-link-dialog');await page.getByRole('button',{name:'닫기',exact:true}).click();
+ async function setTheme(theme){
+  await scope('work').getByRole('button',{name:'설정',exact:true}).click();await scope('work').getByRole('button',{name:'일반',exact:true}).click();
+  await scope('work').getByRole('button',{name:'테마',exact:true}).click();await page.getByRole('menuitemradio',{name:theme==='light'?'라이트 테마':'다크 테마',exact:true}).click();
+  await page.waitForFunction(theme=>document.documentElement.dataset.theme===theme,theme);
+ }
+ await setTheme('light');await scope('work').getByRole('button',{name:'테마',exact:true}).click();await capture('theme-settings.png','light-theme-settings');await page.keyboard.press('Escape');
+ await scope('work').getByRole('button',{name:/보관함으로 돌아가기/}).click();await goHome('work');await capture('light-home.png','work-home-light');
+ await scope('work').getByRole('button',{name:`${first.title} 열기`,exact:true}).click();await scope('work').getByRole('region',{name:'스크립트',exact:true}).waitFor();await capture('light-script.png','speaker-script-light');
+ await setTheme('dark');await scope('work').getByRole('button',{name:/보관함으로 돌아가기/}).click();await goHome('work');await capture('home.png','work-home');
  await page.getByRole('button',{name:'워크스페이스 선택',exact:true}).click();await page.getByRole('menuitemradio',{name:/^Live/}).click();await scope('live').locator('.home-page').waitFor();await openRecent('live');await capture('live-home.png','live-home');
  await scope('live').locator('.home-start-action').first().click();await scope('live').getByLabel('Live 녹음 제목',{exact:true}).fill('오늘의 팀 미팅');
  // UI example only: real renderer/audio capture with scripted Live events, without inference claims.

@@ -117,7 +117,7 @@ test('final speaker analysis failure still saves audio/script and releases the G
   await new Promise(resolve=>setTimeout(resolve,10));
   await reply([{start:0,end:.3,text:'저장된 스크립트',speaker:'A'}]);
   const result=await finishing;
-  assert.equal(result.note.done,true);assert.equal(result.note.status,'failed');assert.match(result.note.transcriptionError,/화자 분석/);
+  assert.equal(result.note.done,true);assert.equal(result.note.status,'partial');assert.match(result.note.diarization.error,/speaker engine/);
   assert.equal(result.note.segments[0].text,'저장된 스크립트');assert.equal(queue.paused,false);assert.equal(live.state.stage,'done');
   assert.equal((await fs.stat((await library.getAudio(result.note.id)).filename)).size,44+16000);
 });

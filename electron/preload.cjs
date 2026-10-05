@@ -14,6 +14,17 @@ else {
 }
 
 contextBridge.exposeInMainWorld('desktop', Object.freeze({
+  preferences: Object.freeze({
+    get: () => ipcRenderer.invoke('preferences:get'), migrate: legacy => ipcRenderer.invoke('preferences:migrate', legacy),
+    set: (mode, change) => ipcRenderer.invoke('preferences:set', { mode, change }),
+    onChange: callback => { const listener = (_event, state) => callback(state); ipcRenderer.on('preferences:changed', listener); return () => ipcRenderer.removeListener('preferences:changed', listener); },
+  }),
+  settings: Object.freeze({
+    get: () => ipcRenderer.invoke('settings:state'), storage: force => ipcRenderer.invoke('settings:storage', force), verify: model => ipcRenderer.invoke('settings:verify', model),
+    location: (id, copy = false) => ipcRenderer.invoke('settings:location', { id, copy }),
+    log: () => ipcRenderer.invoke('settings:log'), diagnostics: () => ipcRenderer.invoke('settings:diagnostics'), link: id => ipcRenderer.invoke('settings:link', id),
+    onChange: callback => { const listener = (_event, state) => callback(state); ipcRenderer.on('settings:changed', listener); return () => ipcRenderer.removeListener('settings:changed', listener); },
+  }),
   appearance: Object.freeze({
     initial: initialTheme,
     get: () => ipcRenderer.invoke('appearance:get'),
@@ -29,9 +40,11 @@ contextBridge.exposeInMainWorld('desktop', Object.freeze({
     openSource: id => ipcRenderer.invoke('youtube:open-source', id),
     onState: callback => { const listener = (_event, state) => callback(state); ipcRenderer.on('youtube:state', listener); return () => ipcRenderer.removeListener('youtube:state', listener); },
   }),
-  systemAudio: Object.freeze({ start: () => ipcRenderer.invoke('system-audio:start'), stop: id => ipcRenderer.invoke('system-audio:stop',id), onState: callback => { const listener=(_event,state)=>callback(state);ipcRenderer.on('system-audio:state',listener);return()=>ipcRenderer.removeListener('system-audio:state',listener); } }),
+  systemAudio: Object.freeze({ cancelPending: () => ipcRenderer.invoke('system-audio:cancel-pending'), start: () => ipcRenderer.invoke('system-audio:start'), stop: id => ipcRenderer.invoke('system-audio:stop',id), onState: callback => { const listener=(_event,state)=>callback(state);ipcRenderer.on('system-audio:state',listener);return()=>ipcRenderer.removeListener('system-audio:state',listener); } }),
   live: Object.freeze({
     getState: () => ipcRenderer.invoke('live:state'),
+    onMeter: callback => { const listener = (_event, value) => callback(value); ipcRenderer.on('live:meter', listener); return () => ipcRenderer.removeListener('live:meter', listener); },
+    onPatch: callback => { const listener = (_event, value) => callback(value); ipcRenderer.on('live:patch', listener); return () => ipcRenderer.removeListener('live:patch', listener); },
     prepare: options => ipcRenderer.invoke('live:prepare', options),
     start: options => ipcRenderer.invoke('live:start', options),
     append: payload => ipcRenderer.invoke('live:append', payload),
@@ -41,6 +54,7 @@ contextBridge.exposeInMainWorld('desktop', Object.freeze({
     onState: callback => { const listener = (_event, state) => callback(state); ipcRenderer.on('live:state', listener); return () => ipcRenderer.removeListener('live:state', listener); },
     getLibrary: () => liveLibrary('list'),
     importAudio: folder => liveLibrary('import', { folder }),
+    retryImport: batch => liveLibrary('retry-import', { batch }),
     convert: (id, model) => ipcRenderer.invoke('transcription:start', { id, model, workspace: 'live' }),
     createFolder: (name, parent = '') => liveLibrary('create-folder', { name, parent }),
     renameFolder: (folder, name) => liveLibrary('rename-folder', { folder, name }),
@@ -51,6 +65,8 @@ contextBridge.exposeInMainWorld('desktop', Object.freeze({
     deleteTrash: ids => liveLibrary('delete-trash', { ids }),
     openLibrary: () => liveLibrary('open'),
   }),
+  retrySpeakers: (id, workspace) => ipcRenderer.invoke('transcription:retry-speakers', { id, workspace }),
+  onLibraryChange: callback => { const listener = (_event, value) => callback(value); ipcRenderer.on('library:changed', listener); return () => ipcRenderer.removeListener('library:changed', listener); },
   getAppInfo: () => ipcRenderer.invoke('app:info'),
   getLibrary: () => ipcRenderer.invoke('library:list'),
   createFolder: (name, parent = '') => ipcRenderer.invoke('library:folder', { name, parent }),

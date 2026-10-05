@@ -87,13 +87,14 @@ def bounded_segment(segment, seconds):
     return item
 
 
-def transcribe(model_dir, audio, name, device, compute):
-    if device == "cuda":
+def transcribe(model_dir, audio, name, device, compute, model=None):
+    if model is None and device == "cuda":
         load_cuda()
     from faster_whisper import WhisperModel
     from faster_whisper.audio import decode_audio
-    emit("phase", phase="loading", message=f"{name} 모델 불러오는 중")
-    model = WhisperModel(str(model_dir), device=device, compute_type=compute, local_files_only=True)
+    if model is None:
+        emit("phase", phase="loading", message=f"{name} 모델 불러오는 중")
+    if model is None: model = WhisperModel(str(model_dir), device=device, compute_type=compute, local_files_only=True)
     emit("phase", phase="transcribing", message="한국어 음성을 변환하는 중")
     decoded = decode_audio(str(audio), sampling_rate=16000)
     seconds = len(decoded) / 16000
@@ -114,9 +115,30 @@ def transcribe(model_dir, audio, name, device, compute):
          model=name, device=device, compute_type=compute)
 
 
+def serve(args):
+    from downloads import model_lock
+    model = None
+    for line in sys.stdin:
+        request = json.loads(line)
+        if request.get('type') == 'stop': break
+        try:
+            from contextlib import nullcontext
+            with model_lock(args.model_dir.parent.parent) if args.lock_environment else nullcontext():
+                if model is None:
+                    if args.device == 'cuda': load_cuda()
+                    from faster_whisper import WhisperModel
+                    emit('phase', phase='loading', message=f'{args.model} 모델 불러오는 중')
+                    model = WhisperModel(str(args.model_dir), device=args.device, compute_type=args.compute_type, local_files_only=True)
+                audio = Path(request['audio'])
+                if not audio.is_file(): raise ValueError('원본 오디오 파일을 찾지 못했습니다.')
+                transcribe(args.model_dir, audio, args.model, args.device, args.compute_type, model=model)
+        except Exception as error:
+            emit('error', message=str(error)); raise SystemExit(1)
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=["probe", "prepare", "transcribe"])
+    parser.add_argument("command", choices=["probe", "prepare", "transcribe", "serve"])
     parser.add_argument("--model-dir", type=Path, required=True)
     parser.add_argument("--audio", type=Path)
     parser.add_argument("--model", default="medium")
@@ -133,11 +155,13 @@ def main():
         from downloads import model_lock
         environment = args.model_dir.parent.parent
         environment.mkdir(parents=True, exist_ok=True)
-        with model_lock(environment) if args.lock_environment else nullcontext():
+        with model_lock(environment) if args.lock_environment and args.command != "serve" else nullcontext():
             if args.command == "probe":
                 probe(args.model_dir, args.device)
             elif args.command == "prepare":
                 prepare(args.model_dir, args.model, args.device, args.compute_type, args.skip_download)
+            elif args.command == "serve":
+                serve(args)
             else:
                 if not args.audio or not args.audio.is_file():
                     raise RuntimeError("원본 오디오 파일을 찾지 못했습니다.")

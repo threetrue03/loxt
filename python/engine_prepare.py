@@ -85,13 +85,15 @@ def run(python, args, notify, protocol=False):
     return events
 
 
-def prepare(root, runtime, names, requested_device, notify, models_verified=False):
+def prepare(root, runtime, names, requested_device, notify, models_verified=False, prepare_auxiliary=True, transient=False):
     root, runtime = root.resolve(), runtime.resolve()
     root.mkdir(parents=True, exist_ok=True)
     notify('engine-start', message='다른 변환·설치 작업을 확인하는 중')
     with model_lock(root):
         gpu = hardware()
         original = read_json(root / 'settings.json', {})
+        if transient:
+            original = {'model': names[0], 'device': requested_device}
         import re
         external = read_json(root / 'external-models.json', [])
         if not isinstance(external, list) or any(not isinstance(item, dict) or not re.fullmatch(r'external-[a-f0-9-]{36}', item.get('id', '')) for item in external):
@@ -133,8 +135,9 @@ def prepare(root, runtime, names, requested_device, notify, models_verified=Fals
         run(python, ['-m', 'pip', 'install', '--disable-pip-version-check', '--resume-retries', '10', '--timeout', '60',
                      '--only-binary=:all:', *[root / 'wheels' / name for name in wheels], '-r',
                      RESOURCES / ('requirements.txt' if device == 'cuda' else 'requirements-cpu.txt')], notify)
-        notify('engine-start', component='auxiliary', message='화자 분석·출력 장치 엔진 준비 중')
-        run(base / 'python.exe', [RESOURCES / 'auxiliary_prepare.py', '--root', root / 'auxiliary', '--runtime', base, '--parent-pid', os.getpid()], notify, True)
+        if prepare_auxiliary:
+            notify('engine-start', component='auxiliary', message='화자 분석·출력 장치 엔진 준비 중')
+            run(base / 'python.exe', [RESOURCES / 'auxiliary_prepare.py', '--root', root / 'auxiliary', '--runtime', base, '--parent-pid', os.getpid()], notify, True)
         prepared = read_json(root / 'prepared.json', {})
         validations = prepared.get('validations', {})
         if not isinstance(validations, dict):
@@ -156,7 +159,7 @@ def prepare(root, runtime, names, requested_device, notify, models_verified=Fals
             save_json(root / 'prepared.json', {'validations': validations})
             notify('model-ready', model=name, device=device, compute_type=compute, index=index, total=len(names))
         # Existing model choice is retained; explicit device changes apply only on success.
-        if not existing or requested_device != 'auto':
+        if not transient and (not existing or requested_device != 'auto'):
             save_json(root / 'settings.json', settings)
         notify('environment-ready', models=names, device=device, selected_model=settings['model'],
                selected_ready=any(key.startswith(f"{settings['model']}:{device}:") for key in validations))
@@ -168,12 +171,14 @@ def main():
     parser.add_argument('--runtime', type=Path, required=True)
     parser.add_argument('--models', required=True)
     parser.add_argument('--device', choices=['auto', 'cuda', 'cpu'], default='auto')
+    parser.add_argument('--skip-auxiliary', action='store_true')
+    parser.add_argument('--transient', action='store_true')
     parser.add_argument('--parent-pid', type=int, default=0)
     args = parser.parse_args()
     watch_parent(args.parent_pid)
     from downloads import emit
     try:
-        prepare(args.root, args.runtime, list(dict.fromkeys(args.models.split(','))), args.device, emit)
+        prepare(args.root, args.runtime, list(dict.fromkeys(args.models.split(','))), args.device, emit, prepare_auxiliary=not args.skip_auxiliary, transient=args.transient)
     except Exception as error:
         emit('error', message=str(error))
         return 1

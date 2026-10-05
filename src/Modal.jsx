@@ -1,28 +1,34 @@
-import { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { DialogContext } from './DialogContext.js';
+import { useEffect, useRef, useId } from 'react';
 
 export default function Modal({ title, onClose, children }) {
-  const ref = useRef(null);
+  const ref = useRef(null), titleId = useId();
   const close = useRef(onClose);
   close.current = onClose;
   useEffect(() => {
     const previous = document.activeElement;
+    const backgrounds = [...document.querySelectorAll('.workspace-panel')].map(element => [element, element.inert]);
+    backgrounds.forEach(([element]) => { element.inert = true; });
+    const guard = event => { if (ref.current && !ref.current.contains(event.target)) ref.current.querySelector('input,button,select')?.focus(); };
+    document.addEventListener('focusin', guard);
     ref.current.querySelector('input,button,select')?.focus();
     function keydown(event) {
       if (event.target.closest('.unified-menu')) return;
-      if (event.key === 'Escape') close.current();
+      if (event.key === 'Escape') { event.preventDefault(); close.current(); }
       if (event.key !== 'Tab') return;
-      const items = [...ref.current.querySelectorAll('button,input,select')].filter(el => !el.disabled);
+      const items = [...ref.current.querySelectorAll('button,input,select,[tabindex="0"]')].filter(el => !el.disabled && el.getClientRects().length);
       const first = items[0], last = items.at(-1);
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     }
     document.addEventListener('keydown', keydown);
-    return () => { document.removeEventListener('keydown', keydown); previous?.focus(); };
+    return () => { document.removeEventListener('keydown', keydown); document.removeEventListener('focusin', guard); backgrounds.forEach(([element, inert]) => { element.inert = inert; }); previous?.focus(); };
   }, []);
-  return <div className="overlay" onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
-    <section ref={ref} className="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
-      <div className="dialog-header"><h2 id="dialog-title">{title}</h2><button onClick={onClose} aria-label="닫기">✕</button></div>
+  return createPortal(<DialogContext.Provider value={ref}><div className="overlay" onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
+    <section ref={ref} className="dialog" role="dialog" aria-modal="true" aria-labelledby={titleId}>
+      <div className="dialog-header"><h2 id={titleId}>{title}</h2><button onClick={onClose} aria-label="닫기">✕</button></div>
       {children}
     </section>
-  </div>;
+  </div></DialogContext.Provider>, document.body);
 }

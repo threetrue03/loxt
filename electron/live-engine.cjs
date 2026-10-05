@@ -4,19 +4,24 @@ const { LiveWindows } = require('./live-windows.cjs');
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 class LiveEngine {
-  constructor(engine, queue, library, notify) {
-    this.engine = engine; this.queue = queue; this.library = library; this.notify = notify;
+  constructor(engine, queue, library, notify, notifyMeter) {
+    this.engine = engine; this.queue = queue; this.library = library; this.notify = notify; this.notifyMeter = notifyMeter;
     this.state = { stage: 'idle', id: null, seconds: 0, segments: [], preview: [], error: '', delaySeconds: 0 };
     this.ingest = Promise.resolve(); this.jobs = []; this.pending = null; this.sequence = 0; this.child = null; this.cancelled = false;
   }
   get busy() { return !['idle', 'done'].includes(this.state.stage); }
   snapshot() { return structuredClone(this.state); }
-  update(change) { Object.assign(this.state, change); this.notify?.(this.snapshot()); }
+  update(change) {
+    Object.assign(this.state, change);
+    if (Object.keys(change).every(key => ['seconds', 'level', 'delaySeconds'].includes(key))) { this.notifyMeter?.({ id: this.state.id, ...change }); return; }
+    if (this.notifyPatch && Object.keys(change).every(key => key === 'preview')) { this.notifyPatch({ id: this.state.id, append: [], state: change }); return; }
+    this.notify?.(this.snapshot());
+  }
   prepare(options) {
     if (this.busy) throw new Error('이미 Live 작업이 진행 중입니다.');
-    this.cancelled = false; this.jobs = []; this.pending = null; this.sequence = 0; this.windows = new LiveWindows(); this.accepted = 0;
+    this.cancelled = false; this.executionRecorded = false; this.jobs = []; this.pending = null; this.sequence = 0; this.windows = new LiveWindows(); this.accepted = 0;
     this.ingest = Promise.resolve(); this.confirmedEnd = 0; this.confirmedUntil = 0; this.processedEnd = 0; this.checkpointAt = 0; this.failure = null; this.saved = null;
-    this.update({ stage: 'preparing', preparationPhase: 'waiting', preparationDetail: null, progress: null, id: null, seconds: 0, level: 0, segments: [], preview: [], error: '', delaySeconds: 0, title: options?.title || '새 Live 녹음' });
+    this.update({ stage: 'preparing', preparationPhase: this.queue.active || this.engine.busy ? 'waiting' : 'checking', preparationDetail: null, progress: null, id: null, seconds: 0, level: 0, segments: [], preview: [], error: '', delaySeconds: 0, title: options?.title || '새 Live 녹음' });
     this.queue.pause(); this.starting = this.initialize(options); return this.starting;
   }
   environmentChanged() {
@@ -37,6 +42,8 @@ class LiveEngine {
     try {
       // Reserve the GPU before waiting: finish the active Work file, hold later jobs.
       while (this.queue.active || this.engine.busy) { if (this.cancelled) throw new Error('Live 시작을 취소했습니다.'); await wait(100); }
+      if (this.cancelled) throw new Error('Live 시작을 취소했습니다.');
+      await this.engine.releaseWorkWorker?.();
       this.previous = { ...this.engine.preferences };
       this.update({ preparationPhase: 'checking' });
       await this.engine.configure({ model: options?.model || 'large-v3-turbo', device: 'auto' }, { persist: false });
@@ -103,7 +110,7 @@ class LiveEngine {
       const seconds = this.windows.total / 16000;
       this.update({ seconds, level: this.windows.level, delaySeconds: this.pending || this.jobs.length ? Math.max(0, seconds - this.processedEnd) : 0 });
       if (seconds - this.checkpointAt >= 5) { this.checkpointAt = seconds; await this.library.checkpointLive(this.state.id, this.state.segments); }
-      return this.snapshot();
+      return { id: this.state.id, seconds, sequence: payload.sequence };
     });
     this.ingest = work.catch(error => { this.fail(error); }); return work;
   }
@@ -120,6 +127,7 @@ class LiveEngine {
   }
   async receive(event) {
     const job = this.pending; if (!job || event.seq !== job.seq || this.failure) return;
+    if (!this.executionRecorded) { this.engine.recordExecution?.(this.modelInfo, 'live'); this.executionRecorded = true; }
     clearTimeout(this.requestTimer);
     const segments = [];
     for (const segment of event.segments || []) {
@@ -135,7 +143,8 @@ class LiveEngine {
     if (job.final) {
       const confirmed = [...this.state.segments, ...segments]; this.confirmedEnd = confirmed.at(-1)?.end || this.confirmedEnd;
       this.confirmedUntil = Math.max(this.confirmedUntil, job.cutoff);
-      this.update({ segments: confirmed, preview: [] });
+      if (this.notifyPatch) { this.state.segments = confirmed; this.state.preview = []; this.notifyPatch({ id: this.state.id, append: segments, state: { preview: [] } }); }
+      else this.update({ segments: confirmed, preview: [] });
       await this.library.checkpointLive(this.state.id, confirmed);
     } else this.update({ preview: segments });
     this.pending = null; this.pump();
@@ -180,11 +189,11 @@ class LiveEngine {
       await this.closeWorker();
       this.update({ finishingPhase: 'diarizing' });
       const audio = await this.library.getAudio(id);
-      let segments = this.state.segments;
+      let segments = this.state.segments, diarization = { status: 'done' };
       try { segments = await this.engine.auxiliary.diarize(audio.filename, segments, child => { this.auxChild = child; }); }
-      catch (error) { this.failure ||= new Error(`화자 분석을 마치지 못해 원본과 현재 스크립트를 저장했습니다. 다시 변환하기로 재시도해 주세요. ${error.message}`); }
+      catch (error) { diarization = { status: 'failed', error: error.message }; }
       this.auxChild = null; this.update({ segments, finishingPhase: null });
-      await this.library.completeTranscription(id, { ...this.modelInfo, seconds: this.saved.note.seconds, segments });
+      await this.library.completeTranscription(id, { ...this.modelInfo, seconds: this.saved.note.seconds, segments, diarization });
       if (this.failure) await this.library.setTranscription(id, { status: 'failed', transcriptionError: this.failure.message });
       const library = await this.library.list();
       await this.release(); this.update({ stage: 'done', preview: [], delaySeconds: 0 });

@@ -3,11 +3,14 @@ const { spawn } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
 
 class SystemAudio {
-  constructor(auxiliary, notify) { this.auxiliary = auxiliary; this.notify = notify; this.captures = new Map(); }
+  constructor(auxiliary, notify) { this.auxiliary = auxiliary; this.notify = notify; this.captures = new Map(); this.generation = 0; }
   async start() {
+    const generation = ++this.generation;
     await this.auxiliary.prepare(event => {
       if (event.type === 'phase' || event.type === 'download') this.notify({ id:null, type:'preparing', progress:event.type === 'download' ? Math.min(99,Math.floor(event.current/event.total*100)) : null });
-    });
+    }, child => { this.preparingChild = child; });
+    this.preparingChild = null;
+    if (generation !== this.generation) throw new Error('컴퓨터 소리 연결을 취소했습니다.');
     const id = randomUUID();
     return new Promise((resolve, reject) => {
       const child = spawn(this.auxiliary.python, [path.join(this.auxiliary.engine.resources,'system_audio.py'), '--parent-pid', String(process.pid)], { windowsHide: true, env: { ...process.env, PYTHONUTF8:'1', PYTHONUNBUFFERED:'1' } });
@@ -30,6 +33,7 @@ class SystemAudio {
       child.stdin.on('error',()=>{});
     });
   }
+  cancelPending() { ++this.generation; if (this.preparingChild && this.auxiliary.listeners.size <= 1) this.auxiliary.engine.kill(this.preparingChild); for (const [id, capture] of this.captures) if (!capture.ready) this.stop(id); }
   stop(id) { const capture=this.captures.get(id);if(!capture)return;capture.stopped=true;capture.child.stdin.end('{"type":"stop"}\n');const timer=setTimeout(()=>this.auxiliary.engine.kill(capture.child),2000);capture.child.once('close',()=>clearTimeout(timer)); }
   shutdown() { for (const capture of this.captures.values()) this.auxiliary.engine.kill(capture.child); }
 }

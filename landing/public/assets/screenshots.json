@@ -1,16 +1,10 @@
 {
-  "version": "1.8.0",
+  "version": "1.10.0",
   "examples": true,
   "liveInference": false,
   "exampleAudio": "silent WAV and scripted transcript/speaker data; not accuracy or speed measurements",
-  "capturedAt": "2026-10-04T03:25:41.301Z",
+  "capturedAt": "2026-10-04T06:44:28.290Z",
   "images": [
-    {
-      "file": "home.png",
-      "width": 1783,
-      "height": 1079,
-      "scenario": "work-home"
-    },
     {
       "file": "workspace.png",
       "width": 1783,
@@ -58,6 +52,36 @@
       "width": 1783,
       "height": 1079,
       "scenario": "model-library"
+    },
+    {
+      "file": "youtube.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "youtube-link-dialog"
+    },
+    {
+      "file": "theme-settings.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "light-theme-settings"
+    },
+    {
+      "file": "light-home.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "work-home-light"
+    },
+    {
+      "file": "light-script.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "speaker-script-light"
+    },
+    {
+      "file": "home.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "work-home"
     },
     {
       "file": "live-home.png",

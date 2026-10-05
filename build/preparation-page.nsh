@@ -46,12 +46,12 @@ Function SorinotePreparationProgressPage
   ${EndIf}
   InitPluginsDir
   StrCpy $SorinoteResultFile "$PLUGINSDIR\prepare-result.txt"
-  !insertmacro MUI_HEADER_TEXT "모델과 전사 환경 준비" "취소하면 준비를 중단합니다. 받은 파일은 다음 준비에서 재사용합니다."
+  !insertmacro MUI_HEADER_TEXT "모델과 변환 환경 준비" "취소하면 준비를 중단합니다. 받은 파일은 다음 준비에서 재사용합니다."
   nsDialogs::Create 1018
   Pop $SorinoteInstallPage
   !insertmacro SorinotePreparationLabel 0 12u "프로그램 파일 설치 완료" 1805
   !insertmacro SorinotePreparationLabel 22u 14u "선택한 모델 확인 중" 1800
-  !insertmacro SorinotePreparationLabel 40u 32u "모델과 전사 환경을 준비합니다." 1801
+  !insertmacro SorinotePreparationLabel 40u 32u "모델과 변환 환경을 준비합니다." 1801
   !insertmacro SorinotePreparationLabel 78u 16u "설치된 모델은 검증 후 재사용합니다." 1802
   !insertmacro SorinotePreparationLabel 98u 22u "준비 결과를 확인하고 있습니다." 1804
   ${NSD_CreateProgressBar} 0 124u 100% 10u ""
@@ -108,8 +108,8 @@ Function SorinotePreparationFailure
     FileReadUTF16LE $0 $SorinoteFailureReason
     FileClose $0
   ${EndIf}
-  MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "전사 준비를 완료하지 못했습니다.$\r$\n$\r$\n$SorinoteFailureReason$\r$\n$\r$\n로그: $SorinoteModelRoot\installer-preparation.log$\r$\n다시 시도하면 받은 파일을 재사용합니다." IDRETRY preparation_retry
-  StrCpy $SorinoteFinishText "앱은 설치했지만 전사 준비는 미완료입니다.$\r$\n앱 설정에서 전사 준비를 다시 실행할 수 있습니다."
+  MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "변환 준비를 완료하지 못했습니다.$\r$\n$\r$\n$SorinoteFailureReason$\r$\n$\r$\n로그: $SorinoteModelRoot\installer-preparation.log$\r$\n다시 시도하면 받은 파일을 재사용합니다." IDRETRY preparation_retry
+  StrCpy $SorinoteFinishText "앱은 설치했지만 변환 준비는 미완료입니다.$\r$\n모델 보관함에서 모델을 확인하고 변환을 다시 시도하세요."
   StrCpy $SorinotePreparationDone 1
   GetDlgItem $0 $HWNDPARENT 1
   EnableWindow $0 1
@@ -122,17 +122,17 @@ Function SorinotePreparationFinish
   StrCpy $SorinotePreparationDone 1
   StrCpy $SorinoteFinishText "선택한 모델 설치를 완료했습니다.$\r$\n앱에서 사용할 모델을 선택할 수 있습니다."
   ${If} $SorinotePrepareState == ${BST_CHECKED}
-    StrCpy $SorinoteFinishText "선택한 모델의 전사 준비와 실제 실행 검사를 완료했습니다.$\r$\n기존 모델 선택은 유지합니다. 앱에서 사용할 모델을 확인하세요."
+    StrCpy $SorinoteFinishText "선택한 모델의 변환 준비와 실제 실행 검사를 완료했습니다.$\r$\n기존 모델 선택은 유지합니다. 앱에서 사용할 모델을 확인하세요."
   ${EndIf}
   ${If} $SorinoteAction == "update"
-    StrCpy $SorinoteFinishText "소리노트 업데이트와 선택한 모델 설치를 완료했습니다.$\r$\n기존 녹음·전사문·설정·모델은 유지했습니다."
+    StrCpy $SorinoteFinishText "LOXT 업데이트와 선택한 모델 설치를 완료했습니다.$\r$\n기존 녹음·스크립트·설정·모델은 유지했습니다."
     ${If} $SorinotePrepareState == ${BST_CHECKED}
-      StrCpy $SorinoteFinishText "소리노트 업데이트와 전사 환경 실행 검사를 완료했습니다.$\r$\n기존 녹음·전사문·설정·모델은 유지했습니다."
+      StrCpy $SorinoteFinishText "LOXT 업데이트와 변환 환경 실행 검사를 완료했습니다.$\r$\n기존 녹음·스크립트·설정·모델은 유지했습니다."
     ${EndIf}
   ${ElseIf} $SorinoteAction == "repair"
-    StrCpy $SorinoteFinishText "소리노트 앱 복구와 선택한 모델 설치를 완료했습니다.$\r$\n기존 녹음·전사문·설정·모델은 유지했습니다."
+    StrCpy $SorinoteFinishText "LOXT 앱 복구와 선택한 모델 설치를 완료했습니다.$\r$\n기존 녹음·스크립트·설정·모델은 유지했습니다."
     ${If} $SorinotePrepareState == ${BST_CHECKED}
-      StrCpy $SorinoteFinishText "소리노트 앱 복구와 전사 환경 실행 검사를 완료했습니다.$\r$\n기존 녹음·전사문·설정·모델은 유지했습니다."
+      StrCpy $SorinoteFinishText "LOXT 앱 복구와 변환 환경 실행 검사를 완료했습니다.$\r$\n기존 녹음·스크립트·설정·모델은 유지했습니다."
     ${EndIf}
   ${EndIf}
   GetDlgItem $0 $SorinoteInstallPage 1800

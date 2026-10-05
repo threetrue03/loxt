@@ -1,6 +1,6 @@
 import { _electron as electron } from 'playwright';
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, writeFile, readFile, symlink } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile, readFile, symlink, copyFile } from 'node:fs/promises';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -12,15 +12,17 @@ const cache = path.join(process.env.APPDATA, 'sorinote-desktop', 'transcription'
 const transcription = path.join(data, 'transcription'); await mkdir(transcription);
 // Reuse installed runtime/model files read-only; settings, locks and all recordings stay in the test profile.
 for (const name of ['venv', 'models']) await symlink(path.join(cache, name), path.join(transcription, name), 'junction');
-await symlink(path.resolve('.runtime/auxiliary'), path.join(transcription, 'auxiliary'), 'junction');
+const auxiliary=path.join(transcription,'auxiliary');await mkdir(auxiliary);for(const name of ['venv','models'])await symlink(path.join(cache,'auxiliary',name),path.join(auxiliary,name),'junction');await copyFile(path.join(cache,'auxiliary/ready.json'),path.join(auxiliary,'ready.json'));
 await writeFile(path.join(transcription, 'settings.json'), JSON.stringify({ model: 'small', device: 'auto' }));
 await writeFile(path.join(transcription, 'prepared.json'), JSON.stringify({ validations: { 'small:cuda:int8_float16': true, 'large-v3-turbo:cuda:int8_float16': true } }));
+const expectedModel = process.argv.includes('--settings') ? 'small' : 'large-v3-turbo';
+if (process.argv.includes('--settings')) { const { WorkspacePreferences } = await import('../electron/workspace-preferences.cjs'); await new WorkspacePreferences(data).set('live', { model: expectedModel }); }
 const source = path.join(data, 'source.wav');
-const original = path.join(process.env.APPDATA, 'sorinote-desktop', 'library', 'recordings', '21959965-51bc-49c4-bf2c-e250b9980f0f', 'audio.webm');
-await promisify(execFile)(path.join(cache, 'venv', 'Scripts', 'python.exe'), ['-c', 'from faster_whisper.audio import decode_audio; import numpy as np, wave, sys; a=decode_audio(sys.argv[1]); w=wave.open(sys.argv[2], "wb"); w.setnchannels(1); w.setsampwidth(2); w.setframerate(16000); w.writeframes((np.clip(a,-1,1)*32767).astype("<i2").tobytes()); w.close()', original, source]);
+// Generate a synthetic voice directly to a test-owned WAV. Never read a user's recording.
+await promisify(execFile)('powershell.exe', ['-NoProfile', '-Command', `Add-Type -AssemblyName System.Speech; $speech = New-Object System.Speech.Synthesis.SpeechSynthesizer; try { $speech.SelectVoiceByHints([System.Speech.Synthesis.VoiceGender]::NotSet, [System.Speech.Synthesis.VoiceAge]::NotSet, 0, [System.Globalization.CultureInfo]::GetCultureInfo('ko-KR')) } catch {}; try { $speech.SetOutputToWaveFile($env:LOXT_TEST_AUDIO); $speech.Speak('안녕하세요. 로컬 음성 변환 기능을 검증하고 있습니다. 녹음과 스크립트는 이 컴퓨터에 저장됩니다.') } finally { $speech.Dispose() }`], { windowsHide:true, env:{...process.env, LOXT_TEST_AUDIO:source} });
 const work = new Library(path.join(data, 'library')); const workNote = (await work.importAudio(source, '')).note;
 const before = await work.list();
-const env = { ...process.env, SORINOTE_TEST: '1', SORINOTE_TEST_DATA: data }; delete env.ELECTRON_RUN_AS_NODE; delete env.SORINOTE_DEV;
+const env = { ...process.env, SORINOTE_TEST: '1', SORINOTE_TEST_DATA: data, PYTHONDONTWRITEBYTECODE:'1', HF_HUB_OFFLINE:'1', HF_HOME:path.join(data,'hf-cache') }; delete env.ELECTRON_RUN_AS_NODE; delete env.SORINOTE_DEV;
 const executable = process.argv.slice(2).find(argument => argument.endsWith('.exe'));
 const launch = () => electron.launch({ ...(executable ? { executablePath: path.resolve(executable) } : {}), args: [...(executable ? [] : ['.']), '--use-fake-device-for-media-stream', `--use-file-for-fake-audio-capture=${source}`], env });
 let app = await launch(); let page;
@@ -54,7 +56,7 @@ try {
   await untilState(state => state.stage === 'recording');
   console.log('PASS permission before preparation and automatic start after preparation');
   await untilState(state => state.seconds >= 5);
-  let state = await page.evaluate(() => window.desktop.live.getState()); assert.equal(state.device, 'cuda'); assert.equal(state.model, 'large-v3-turbo');
+  let state = await page.evaluate(() => window.desktop.live.getState()); assert.equal(state.device, 'cuda'); assert.equal(state.model, expectedModel);
   if (process.argv.includes('--theme')) {
     const prior = (await page.evaluate(()=>window.desktop.live.getState())).seconds;
     await page.getByRole('button',{name:'설정',exact:true}).click();
@@ -73,6 +75,16 @@ try {
   const hidden = (await page.evaluate(() => window.desktop.live.getState())).seconds;
   await untilState(state => state.seconds >= hidden + 1);
   await switchTo('work'); await page.getByRole('button', { name: 'Live 녹음으로 돌아가기', exact: true }).waitFor();
+  if (process.argv.includes('--settings')) {
+    await page.getByRole('button', { name: '설정', exact: true }).click();
+    await page.getByRole('button', { name: '모델 보관함', exact: true }).click();
+    await page.locator('[data-workspace="work"] .settings-lock').waitFor();
+    assert.equal(await page.getByRole('button', { name: '외부 모델 불러오기', exact: true }).isDisabled(), true);
+    await assert.rejects(page.evaluate(() => window.desktop.preferences.set('work', { model: 'large-v3-turbo' })), /Live 작업/);
+    await screenshot('work-models-locked-by-live.png');
+    await page.getByRole('button', { name: '← 돌아가기', exact: true }).click();
+    console.log('PASS real Live lock disables Work model actions and backend rejects default changes');
+  }
   const queued = await page.evaluate(id => window.desktop.startTranscription({ id, model: 'small' }), workNote.id);
   assert.equal(queued.queue[0].status, 'queued');
   await page.evaluate(id => window.desktop.cancelTranscription(id), workNote.id);
@@ -109,7 +121,7 @@ try {
   assert.equal(JSON.parse(await readFile(path.join(transcription, 'settings.json'), 'utf8')).model, 'small');
   assert.deepEqual((await page.evaluate(() => window.desktop.getLibrary())).notes.map(note => note.id), before.notes.map(note => note.id));
   assert.deepEqual(errors, []);
-  await app.close(); app = await launch(); page = await app.firstWindow(); page.setDefaultTimeout(60000);
+  await app.close(); app = await launch(); page = await app.firstWindow();await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].show()); page.setDefaultTimeout(60000);
   await page.getByRole('button', { name: 'Live GPU 검증 열기', exact: true }).click();
   await page.getByRole('button', { name: '녹음 재생', exact: true }).waitFor();
   assert.equal((await page.evaluate(() => window.desktop.live.getLibrary())).notes[0].id, saved.id);

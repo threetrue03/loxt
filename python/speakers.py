@@ -1,5 +1,7 @@
 """CPU speaker turns, canonical recording-local IDs and provisional Live identities."""
 from pathlib import Path
+from contextlib import contextmanager
+import tempfile
 import numpy as np
 
 
@@ -68,12 +70,29 @@ class Speakers:
         return result
 
 
-def decode(filename):
+@contextmanager
+def decoded_audio(filename):
+    """Stream lossless float32 samples to a reclaimable mapping, without block copies."""
     import av
-    blocks = []
-    with av.open(str(filename)) as container:
-        resampler = av.AudioResampler(format='fltp', layout='mono', rate=16000)
-        for frame in container.decode(audio=0):
-            for output in resampler.resample(frame): blocks.append(output.to_ndarray().reshape(-1))
-        for output in resampler.resample(None): blocks.append(output.to_ndarray().reshape(-1))
-    return np.concatenate(blocks).astype(np.float32) if blocks else np.empty(0,dtype=np.float32)
+    with tempfile.TemporaryFile() as file:
+        samples = 0
+        with av.open(str(filename)) as container:
+            resampler = av.AudioResampler(format='fltp', layout='mono', rate=16000)
+            def write(outputs):
+                nonlocal samples
+                for output in outputs:
+                    block = np.ascontiguousarray(output.to_ndarray().reshape(-1), dtype=np.float32)
+                    file.write(memoryview(block)); samples += len(block)
+            for frame in container.decode(audio=0): write(resampler.resample(frame))
+            write(resampler.resample(None))
+        file.flush()
+        if not samples:
+            yield np.empty(0, dtype=np.float32); return
+        mapped = np.memmap(file, mode='r', dtype=np.float32, shape=(samples,))
+        try: yield mapped
+        finally: mapped._mmap.close()
+
+
+def decode(filename):
+    # Compatibility for callers that need an owned array. Analysis uses the context.
+    with decoded_audio(filename) as audio: return np.array(audio, copy=True)

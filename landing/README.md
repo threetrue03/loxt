@@ -1,43 +1,83 @@
-# LOXT 소개 페이지 — 1.8.0
+# LOXT 소개 페이지 — 1.10.0
 
-React + Vite, 기존 차콜 색상과 SUIT, 최신 앱 화면을 사용하는 소개 페이지입니다. 브랜드 문구는 LOXT — Local Speech-to-Text powered by your own hardware. 입니다.
+React + Vite로 만든 소개·다운로드 페이지입니다. 기존 차콜 색상과 SUIT 글꼴을 유지하고 LOXT 1.10.0의 실제 앱 화면을 사용합니다.
 
-## 로컬 확인
+브랜드 문구: **LOXT — Local Speech-to-Text powered by your own hardware.**
+
+## 로컬 실행
+
+프로젝트 루트에서 실행합니다.
 
 ```powershell
 cd landing
+npm install
 npm run dev
 ```
 
-개발 서버는 http://127.0.0.1:5180 입니다. 다운로드 버튼은 GitHub Releases의 v1.8.0 설치 파일에 연결합니다. 개발 서버의 /downloads/LOXT-Setup-1.8.0-x64.exe는 로컬 설치 파일 확인용입니다.
+개발 서버: http://127.0.0.1:5180/
 
-## 배포
+다운로드 버튼은 아래 GitHub Releases의 설치 파일에 직접 연결합니다.
+
+https://github.com/threetrue03/loxt/releases/download/v1.10.0/LOXT-Setup-1.10.0-x64.exe
+
+개발 서버의 `/downloads/LOXT-Setup-1.10.0-x64.exe`는 로컬 설치 파일 확인용 경로이며 공개 다운로드 버튼에서는 사용하지 않습니다.
+
+## 빌드와 배포
 
 ```powershell
 npm run build
 npm run preview
 ```
 
-배포 파일은 `landing/dist`입니다. 설치 파일을 포함하지 않고 GitHub Releases의 공식 다운로드 주소로 연결합니다.
+배포 파일은 `landing/dist`에 생성됩니다. 설치 프로그램을 웹사이트에 포함하지 않고 GitHub Releases에서 내려받도록 연결합니다.
 
-https://github.com/threetrue03/loxt/releases/download/v1.8.0/LOXT-Setup-1.8.0-x64.exe
+Cloudflare Pages의 **loxt → Create deployment → Production**에서 다음 중 하나를 업로드합니다.
 
-Cloudflare Pages의 loxt 프로젝트에서 Create deployment → Production을 선택하고 `landing/dist` 폴더 또는 `landing/loxt-site-v1.8.0.zip`을 업로드합니다. ZIP의 최상위에 index.html과 assets가 들어 있습니다. 로컬 빌드만으로 공개 사이트가 갱신되지는 않습니다.
+- 폴더: `landing/dist`
+- 배포 ZIP: `landing/loxt-site-v1.10.0.zip`
 
-## 최신 반영 내용
+ZIP 최상위에는 `index.html`과 `assets/`가 있습니다. 로컬 빌드만으로 공개 사이트가 변경되지는 않으며, Production 업로드 후 반영됩니다.
 
-- 1.8.0 다운로드·릴리스 링크와 브랜드 문구를 release.mjs에서 관리합니다.
-- 새 홈, 최근 열람, 진행 중인 작업, 폴더 바로가기를 소개합니다.
-- Work 파일 변환과 Live 실시간 스크립트, 워크스페이스 전환과 별도 보관함을 설명합니다.
-- Live의 권한 확인 → 모델 준비 → 자동 녹음과 종료 후 화자 보정을 안내합니다.
-- 화자 표시, 원본 구간 재생, 전체 복사·내보내기·다시 변환하기를 소개합니다.
-- 컴퓨터 소리의 기본 출력 장치 추적·재연결, 모델 설치·외부 모델, 폴더·드래그·휴지통을 설명합니다.
-- 기능, FAQ, 검색·공유 메타데이터와 모든 앱 캡처를 갱신했습니다. 예전 로고 홈 이동 설명을 제거했습니다.
+ZIP을 다시 만들려면 프로젝트 루트에서 실행합니다.
 
-## 캡처와 검증
+```powershell
+Compress-Archive -Path landing/dist/* -DestinationPath landing/loxt-site-v1.10.0.zip -Force
+```
 
-`node scripts/capture.mjs`는 별도의 `test-results/landing-preview-*` 보관함에 예시 녹음·폴더·스크립트를 만들고 패키지된 LOXT 1.8.0에서 11개 화면을 캡처합니다. 사용자 녹음이나 모델을 변경하지 않습니다.
+## 반영 내용
 
-예시 오디오는 무음이며 스크립트·화자 데이터는 소개용입니다. Live 화면은 실제 앱 렌더러와 입력 캡처에 예시 상태 이벤트를 제공해 촬영하며 모델 추론 성능·정확도를 측정하지 않습니다. screenshots.json에 앱 버전, 예시 여부, 이미지 크기와 시나리오를 기록합니다.
+- 1.10.0 다운로드 주소, 릴리스 링크와 버전 표시.
+- 1.10.0 실제 앱에서 새로 촬영한 홈·보관함·녹음·Live·스크립트·모델·휴지통 화면.
+- 다크·라이트 앱 화면을 전환하는 테마 미리보기와 테마 저장 안내.
+- YouTube 링크 입력 → 영상 확인 → 폴더·모델 선택 → 음성 가져오기·변환 흐름과 지원 범위.
+- Work·Live의 별도 보관함, Live 권한·모델 준비 후 자동 녹음, 화자 구분, 컴퓨터 소리 녹음 설명.
+- 모델 다운로드 크기, 최신 FAQ, 검색·공유 메타데이터.
+- 공식 GitHub 저장소와 소스 MIT 라이선스 링크. 모델·외부 실행 도구의 라이선스는 별도 조건을 따릅니다.
 
-`node scripts/check.mjs http://127.0.0.1:5182/`는 정적 미리보기 서버에서 PC·모바일 넘침, 이미지, FAQ, Work·Live 설명과 다운로드 링크를 검사합니다. 1.8.0 링크는 HTTP 200, 138,339,885 bytes 응답으로 로컬 설치 파일과 같은 크기임을 확인했습니다.
+## 앱 화면 캡처
+
+`landing` 폴더에서:
+
+```powershell
+node scripts/capture.mjs
+```
+
+먼저 프로젝트의 Windows 앱 빌드가 `release/stage5/win-unpacked/LOXT.exe`에 있어야 합니다. 앱 버전과 `release.mjs`의 버전이 다르면 캡처를 중단합니다.
+
+별도 `test-results/landing-preview-*` 프로필에 예시 녹음·폴더·스크립트를 생성하고 실제 앱에서 **15개 화면**을 촬영합니다. 사용자 보관함이나 모델을 변경하지 않습니다. 다크·라이트 홈 미리보기는 같은 예시 기록을 사용합니다.
+
+예시 오디오는 무음이며 스크립트·화자 데이터는 소개용입니다. Live 화면은 실제 렌더러와 입력 캡처에 예시 상태 이벤트를 제공해 촬영합니다. 해당 캡처는 추론 정확도나 변환 속도의 측정 결과가 아닙니다.
+
+`public/assets/screenshots.json`에 실제 앱 버전, 예시 여부, 촬영 시간, 이미지 크기와 시나리오를 기록합니다.
+
+## 검증
+
+정적 미리보기 서버를 연 상태에서 실행합니다.
+
+```powershell
+node scripts/check.mjs http://127.0.0.1:5182/
+```
+
+검증 서버 주소는 실제 열린 미리보기 포트로 바꾸세요. 스크립트는 390·768·1440px 화면의 가로 넘침, 이미지, FAQ, 다크·라이트 미리보기 전환, Work·Live 설명, 최신 다운로드 링크와 브라우저 오류를 확인합니다.
+
+1.10.0 다운로드 주소는 확인 당시 **HTTP 200 / 155,810,413 bytes**를 반환했고 로컬 설치 파일의 크기와 일치했습니다.

@@ -22,3 +22,18 @@
 @media(max-width:800px){.workspaces{padding-top:64px}.workspace-grid{gap:20px}.workspace-grid h3{font-size:22px}}
 @media(max-width:540px){.nav nav{gap:12px}.workspace-grid,.management-previews{grid-template-columns:1fr;gap:32px}.workspace-grid>article>p{min-height:0}.workspaces .section-heading{text-align:left}.workspace-grid figure{margin-top:20px}}
 @media(max-width:540px){.hero>.brand-expansion{font-size:12px;max-width:36ch;margin-bottom:20px}.workflow-intro{font-size:15px}}
+
+.themes{padding-block:88px;border-top:1px solid var(--line)}
+.themes .section-heading h2{margin-top:14px}
+.theme-switch{display:flex;justify-content:center;gap:8px;margin-top:30px}
+.theme-switch button{cursor:pointer;border:1px solid var(--line);border-radius:8px;background:transparent;color:var(--muted);padding:11px 20px;font-size:14px;transition:background .15s,color .15s}
+.theme-switch button:hover{background:#282827;color:var(--ink)}
+.theme-switch button[aria-pressed="true"]{background:#353533;color:var(--ink);border-color:#666660}
+.theme-switch button:focus-visible{outline:2px solid var(--blue);outline-offset:4px}
+.theme-preview{margin-top:28px}
+.youtube-workflow{border-bottom:0}
+.workflow-note{font-size:12px;margin-top:26px;max-width:44ch}
+.footer-links{display:flex;gap:22px;margin-left:auto;align-items:center}
+.footer-links a{margin-left:0;white-space:nowrap}
+@media(max-width:800px){.themes{padding-block:64px}}
+@media(max-width:540px){.themes .section-heading{text-align:left}.theme-switch{justify-content:flex-start}.footer-links{gap:16px}}

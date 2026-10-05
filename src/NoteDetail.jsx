@@ -30,10 +30,20 @@ export default function NoteDetail({ workspaceActive = true, audioHost = 'record
   const active = segments.findLastIndex(s => s.start <= position);
   useEffect(() => { setTitle(note.title); setPosition(0); setPlaying(false); setSpeed(1); setDuration(note.seconds || 0); setReady(false); setError(''); setReview(false); }, [note.id]);
   useEffect(() => { if (note.seconds > 0) setDuration(note.seconds); }, [note.seconds]);
+  const titleSave = useRef(Promise.resolve()), titleVersion = useRef(0), savedTitle = useRef(note.title);
+  useEffect(() => { savedTitle.current = note.title; }, [note.title]);
   async function saveTitle() {
-    const value = title.trim() || note.title;
-    if (value !== note.title && !(await onUpdate({ title: value }))) setTitle(note.title);
-    else setTitle(value);
+    const value = title.trim() || savedTitle.current;
+    if (value === savedTitle.current) return;
+    const version = ++titleVersion.current;
+    const task = titleSave.current.catch(() => {}).then(async () => {
+      try {
+        if (value === savedTitle.current) return;
+        if (!(await onUpdate({ title: value }))) throw new Error('제목을 저장하지 못했습니다. 다시 입력해 주세요.');
+        savedTitle.current = value;
+      } catch (failure) { if (version === titleVersion.current) { setTitle(savedTitle.current); setError(failure.message); } }
+    });
+    titleSave.current = task; await task;
   }
   async function play() {
     setError('');
@@ -66,9 +76,10 @@ export default function NoteDetail({ workspaceActive = true, audioHost = 'record
     {note.source?.type === 'youtube' && audioHost === 'recording' ? <button className="back youtube-source" onClick={() => { window.desktop.youtube.openSource(note.id).catch(failure => setError(failure.message)); }}><Icon name="youtube"/>YouTube 원본 열기</button> : null}
     {note.recovered ? <p className="recovery-message">중단된 녹음에서 저장된 부분을 복구했습니다.</p> : null}
     {error || note.transcriptionError ? <p className="error-message" role="alert">{error || note.transcriptionError}</p> : null}
+    {note.diarization?.status === 'failed' && !converting ? <p className="recovery-message" role="status">스크립트는 저장되었습니다. 화자 분석 실패: {note.diarization.error} <button className="secondary" disabled={environment?.busy} onClick={async () => { try { await window.desktop.retrySpeakers(note.id, audioHost === 'live' ? 'live' : 'work'); } catch (failure) { setError(failure.message); } }}>화자 분석 재시도</button></p> : null}
     {invalidTimeline ? <p className="error-message" role="alert">스크립트 시간이 원본 녹음 길이와 맞지 않습니다. 하단의 다시 변환하기 버튼으로 시간 정렬을 다시 진행해 주세요.</p> : null}
     <div className="transcript-frame"><div className="detail-tabs"><span>스크립트</span><div className="script-actions">{note.done && !converting ? <><CopyButton onCopy={onCopy} onError={setError}/><button className="script-export" onClick={onExport}><Icon name="download"/>내보내기</button></> : <span>{queued?.status === 'queued' ? '변환 대기 중' : transcribing ? taskLabel(environment) : '변환 대기'}</span>}</div></div><div className="transcript" role="region" aria-label="스크립트" aria-busy={converting} tabIndex="0">{converting ? <ScriptSkeleton/> : segments.length ? segments.map((segment, index) => <button className={`segment ${active === index ? 'active' : ''}`} key={`${segment.start}-${index}`} aria-label={`${formatTime(segment.start)} 구간 재생`} disabled={!note.done || !ready} onClick={() => seek(Math.min(segment.start, duration))}><span className="timestamp">{formatTime(segment.start)}{segment.speaker ? <span className="speaker-badge" aria-label={`화자 ${segment.speaker}`}>{segment.speaker}</span> : null}</span><span className="segment-text">{segment.text}</span></button>) : <div className="empty">{transcribing ? '변환된 내용이 여기에 표시됩니다.' : note.done ? '인식된 음성이 없습니다. 원본 녹음을 확인하세요.' : '하단에서 변환하기를 눌러 스크립트를 만드세요.'}</div>}</div></div>
     <div className="bottom-controls">{queued ? <div className="conversion-progress"><div><strong>{queued.status === 'queued' ? '대기 중 · 순서대로 변환합니다' : taskLabel(environment)}</strong><progress aria-label="변환 진행" max="100" value={queued.status === 'queued' ? 0 : environment.progress ?? undefined}/></div><span>{queued.status === 'queued' ? '0%' : environment.progress != null ? `${environment.progress}%` : ''}</span><button className="secondary" onClick={onCancel} disabled={queued.stage === 'saving'}>변환 취소</button></div> : note.done ? <div className="player workspace-player"><button className="play" title={playing ? '일시정지' : '재생'} aria-label={playing ? '녹음 일시정지' : '녹음 재생'} onClick={play} disabled={!ready}><Icon name={playing ? 'pause' : 'play'}/></button><div className="timeline"><input type="range" min="0" max={duration || 1} step="0.1" value={Math.min(position, duration || 1)} disabled={!ready || !duration} aria-label="재생 위치" onChange={event => seek(Number(event.target.value))}/><div className="time-label">{formatTime(position)} / {formatTime(duration)}</div></div><Select className="speed-select" label="재생 속도" value={speed} upward disabled={!ready} onChange={value => { setSpeed(value); audio.current.playbackRate = value; }} options={[.75,1,1.5,2].map(value => ({value,label:`${value === 1 ? '1.0' : value}×`}))}/>{onConvert ? <button className="secondary" disabled={locked || note.deleted} onClick={() => setReview(true)}>다시 변환하기</button> : null}</div> : <div className="conversion-progress"><span>원본 저장 완료 · {formatTime(duration)}</span><button className="primary" disabled={!environment || locked || note.deleted} onClick={() => setReview(true)}>변환하기</button></div>}</div>
-    {review ? <ConversionDialog folders={folders} parents={folderParents} initialFolder={note.folder || ''} environment={environment} onClose={() => setReview(false)} onConfirm={async options => { await onConvert(options); setReview(false); }}/>: null}
+    {review ? <ConversionDialog mode={audioHost === 'live' ? 'live' : 'work'} preserveLocation folders={folders} parents={folderParents} initialFolder={note.folder || ''} environment={environment} onClose={() => setReview(false)} onConfirm={async options => { await onConvert(options); setReview(false); }}/>: null}
   </section>;
 }

@@ -45,7 +45,10 @@ try {
   else {
     // Captured from the original app before the theme migration, so a fresh
     // checkout can verify dark compatibility without private test data.
-    assert.deepEqual(colors, JSON.parse(await readFile(new URL('./fixtures/dark-theme-baseline.json', import.meta.url), 'utf8'))); await capture('dark-after.png'); console.log('PASS original dark colors and geometry');
+    const baseline = JSON.parse(await readFile(new URL('./fixtures/dark-theme-baseline.json', import.meta.url), 'utf8'));
+    // Approved 1.11.0 A16 typography predates this settings change. Keep every original color/geometry assertion.
+    baseline['.note-card .cell'].fontSize = '12px'; baseline['.note-card .note-folder'].fontSize = '12px'; baseline['.preview-segment'].fontSize = '13px';
+    assert.deepEqual(colors, baseline); await capture('dark-after.png'); console.log('PASS original dark colors and geometry');
     const workBefore = await page.evaluate(() => window.desktop.getLibrary());
     const liveBefore = await page.evaluate(() => window.desktop.live.getLibrary());
     const darkLogo = await scope.locator('.brand-logo').getAttribute('src');
@@ -73,7 +76,7 @@ try {
     await publish({ ...environment, busy: true, operation: 'download', download: { model: 'small' }, progress: 42 });
     await scope.getByRole('button', { name: '저성능 설치 진행', exact: true }).waitFor(); await capture('light-model-download.png');
     await publish(environment);
-    await scope.getByRole('button', { name: /보관함으로 돌아가기/ }).click();
+    await scope.getByRole('button', { name: '← 돌아가기', exact: true }).click();
     await capture('light-library.png');
     await scope.locator('.note-card').filter({ hasText: '테마 검증 1' }).click({ button: 'right' });
     await page.getByRole('menuitem', { name: '폴더 이동하기', exact: true }).click();
@@ -102,7 +105,7 @@ try {
     await liveScope.getByRole('button', { name: '설정', exact: true }).click();
     assert.equal(await liveScope.getByRole('button', { name: '테마', exact: true }).innerText().then(value => value.trim()), '라이트 테마');
     await selectTheme('live', 'dark'); assert.equal(await scope.locator('.brand-logo').getAttribute('src'), darkLogo);
-    await selectTheme('live', 'light'); await liveScope.getByRole('button', { name: /보관함으로 돌아가기/ }).click();
+    await selectTheme('live', 'light'); await liveScope.getByRole('button', { name: '← 돌아가기', exact: true }).click();
     await liveScope.getByRole('button', { name: '모두 보기', exact: true }).click(); await liveScope.getByRole('button', { name: '카드 보기', exact: true }).click();
     await capture('light-live-library.png');
     await liveScope.getByRole('button', { name: '새 Live 녹음', exact: true }).click();

@@ -1,3 +1,4 @@
+import { serializeTranscript } from '../shared/transcript.js';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Icon from './Icon.jsx';
 import useLibrarySelection from './useLibrarySelection.jsx';
@@ -14,9 +15,11 @@ import FolderTree, { folderName as leafName, parentOf } from './FolderTree.jsx';
 import FolderBreadcrumb from './FolderBreadcrumb.jsx';
 import FolderCard from './FolderCard.jsx';
 import ActionMenu from './ActionMenu.jsx';
-import { fonts, loadPreferences, settingsTabs, taskLabel } from './uiPreferences.js';
+import { fonts, taskLabel } from './uiPreferences.js';
 import NoteDetail from './NoteDetail.jsx';
-import TranscriptionSettings from './TranscriptionSettings.jsx';
+import SettingsPage from './SettingsPage.jsx';
+import SettingsSidebar from './SettingsSidebar.jsx';
+import { useSettings } from './SettingsProvider.jsx';
 import { formatTime, folderStorageKey, loadFolders } from './data.js';
 
 const filterNames = { all: '홈', library: '모든 기록', recent: '최근 녹음', trash: '휴지통', '': '내 보관함' };
@@ -28,16 +31,16 @@ export default function App({ workspaceActive = true, liveActive = false, onWork
   const [draftOpen, setDraftOpen] = useState(false);
   const [draftFolder, setDraftFolder] = useState('');
   const [filter, setFilter] = useState('all');
-  const [view, setView] = useState('list');
+  const sharedSettings = useSettings();
+  const { open: settingsOpen, tab: settingsTab } = sharedSettings;
+  const [pageView, setPageView] = useState('list');
+  const view = settingsOpen ? 'settings' : pageView;
+  function setView(value) { if (value === 'settings') sharedSettings.openSettings(); else { sharedSettings.closeSettings(); setPageView(value); } }
   const [draftKey, setDraftKey] = useState(0);
-  const [preferences, setPreferences] = useState(loadPreferences);
-  const [settingsTab, setSettingsTab] = useState('general');
+  const preferences = { ...sharedSettings.preferences.work, font: 'suit', autoTranscribe: true };
+  const layout = sharedSettings.preferences.work.layout;
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [settingsReturn, setSettingsReturn] = useState('list');
-  const [layout, setLayout] = useState(() => {
-    try { const value = localStorage.getItem('sorinote.library-layout'); return ['cards', 'compact', 'list'].includes(value) ? value : 'cards'; }
-    catch { return 'cards'; }
-  });
   const [selectedId, setSelectedId] = useState(null);
   const [sort, setSort] = useState('date');
   const [modal, setModal] = useState(null);
@@ -49,6 +52,7 @@ export default function App({ workspaceActive = true, liveActive = false, onWork
   const [notice, setNotice] = useState('');
   const [appInfo, setAppInfo] = useState(null);
   const [storagePath, setStoragePath] = useState('');
+  const [recovery, setRecovery] = useState(null);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [environment, setEnvironment] = useState(null);
@@ -56,16 +60,14 @@ export default function App({ workspaceActive = true, liveActive = false, onWork
   const backgroundEnvironment = { ...environment, queue: [...(environment?.queue || []), ...imports] };
   useEffect(() => { onBackgroundChange?.(Boolean((busy && draftOpen) || environment?.queue?.length || environment?.task || imports.length)); }, [busy, draftOpen, environment, imports.length, onBackgroundChange]);
   useEffect(() => { if (!workspaceActive) { setModal(null); setActionMenu(null); setCreatingFolder(null); setRenaming(null); } }, [workspaceActive]);
-  const previousTask = useRef(null);
-  const previousStage = useRef('idle');
-  const previousQueue = useRef('');
   const toastTimer = useRef(null);
   const selected = notes.find(n => n.id === selectedId);
   const { recent, remember } = useRecentNotes('work', notes);
   function openNote(id) { remember(id); setSelectedId(id); setView('workspace'); }
   const closeModal = useCallback(() => setModal(null), []);
   const closeActionMenu = useCallback(() => setActionMenu(null), []);
-  const applyLibrary = useCallback(data => { setNotes(data.notes); setFolders(data.folders); setFolderParents(data.folderParents || {}); setStoragePath(data.storagePath); }, []);
+  const libraryRevision = useRef(-1);
+  const applyLibrary = useCallback(data => { if (data.revision != null && data.revision < libraryRevision.current) return; libraryRevision.current = data.revision ?? libraryRevision.current; setNotes(data.notes); setFolders(data.folders); setFolderParents(data.folderParents || {}); setStoragePath(data.storagePath); setRecovery(data.recovery); }, []);
   useEffect(() => {
     if (!window.desktop?.youtube) return;
     let active = true;
@@ -116,16 +118,11 @@ export default function App({ workspaceActive = true, liveActive = false, onWork
     const receive = state => {
       if (!active) return;
       setEnvironment(state);
-      if (((state.task?.id || null) !== previousTask.current)
-        || (previousStage.current !== 'idle' && state.stage === 'idle') || previousQueue.current !== JSON.stringify(state.queue || [])) {
-        window.desktop.getLibrary().then(data => { if (active) applyLibrary(data); }).catch(() => {});
-      }
-      previousTask.current = state.task?.id || null; previousStage.current = state.stage;
-      previousQueue.current = JSON.stringify(state.queue || []);
     };
     const unsubscribe = window.desktop.onTranscriptionState(receive);
+    const offLibrary = window.desktop.onLibraryChange(event => { if (event.workspace === 'work') window.desktop.getLibrary().then(data => { if (active) applyLibrary(data); }).catch(() => {}); });
     window.desktop.getTranscriptionEnvironment().then(receive).catch(() => { if (active) toast('변환 환경을 확인하지 못했습니다. 설정에서 다시 확인해 주세요.'); });
-    return () => { active = false; unsubscribe(); };
+    return () => { active = false; unsubscribe(); offLibrary(); };
   }, [applyLibrary]);
   async function checkEnvironment() {
     try { setEnvironment(await window.desktop.getTranscriptionEnvironment()); }
@@ -203,26 +200,18 @@ export default function App({ workspaceActive = true, liveActive = false, onWork
     catch { toast('변경을 저장하지 못했습니다. 저장 공간과 권한을 확인해 주세요.'); return false; }
   }
   function openSettings(tab = 'general') {
-    setSettingsTab(typeof tab === 'string' ? tab : 'general');
+    sharedSettings.openSettings(typeof tab === 'string' ? tab : 'general');
     setSettingsReturn(view === 'settings' ? settingsReturn : view);
-    setView('settings');
+
   }
-  function changePreferences(change) {
-    setPreferences(previous => {
-      const next = { ...previous, ...change };
-      try { localStorage.setItem('sorinote.ui-preferences', JSON.stringify(next)); } catch { /* session only */ }
-      return next;
-    });
-  }
+  async function changePreferences(change) { return sharedSettings.change('work', change); }
   async function openStorage() {
     try { if (await window.desktop.openLibrary()) toast('저장 폴더를 열지 못했습니다.'); }
     catch { toast('저장 폴더를 열지 못했습니다.'); }
   }
-  function changeLayout(value) {
-    setLayout(value);
-    try { localStorage.setItem('sorinote.library-layout', value); } catch { /* 읽기 전용 저장소에서는 이번 실행에만 적용합니다. */ }
-  }
+  function changeLayout(value) { return sharedSettings.change('work', { layout: value }); }
   function newRecording() {
+    if (!sharedSettings.ready) { toast('설정을 확인한 뒤 다시 시작해 주세요.'); return; }
     if (draftOpen) { setSelectedId(null); setView('workspace'); return; }
     setDraftFolder(folders.includes(filter) ? filter : ''); setDraftOpen(true); setSelectedId(null); setDraftKey(value => value + 1); setView('workspace');
   }
@@ -254,7 +243,7 @@ export default function App({ workspaceActive = true, liveActive = false, onWork
   }
   async function exportTranscript() {
     if (!selected.done) { toast('스크립트가 없습니다.'); return; }
-    const text = selected.title + '\n\n' + selected.segments.map(s => `${formatTime(s.start)} ${s.text}`).join('\n\n');
+    const text = serializeTranscript(selected.segments, { time: true, title: selected.title });
     try {
       if (window.desktop) {
         const result = await window.desktop.exportTranscript({ title: selected.title, text });
@@ -297,7 +286,7 @@ export default function App({ workspaceActive = true, liveActive = false, onWork
   return <div className={`app ${sidebarCollapsed && view !== 'settings' ? 'sidebar-collapsed' : ''} ${view === 'settings' ? 'settings-view' : ''}`} style={{ fontFamily: fonts.find(font => font.id === preferences.font).family }}>
     <header className="app-header"><button className="sidebar-toggle" onClick={() => setSidebarCollapsed(value => !value)} disabled={view === 'settings'} aria-label={sidebarCollapsed ? '사이드바 펼치기' : '사이드바 접기'} aria-expanded={view === 'settings' || !sidebarCollapsed}><Icon name="sidebar"/></button><WorkspaceMenu value="work" onChange={onWorkspaceChange}/></header>
     <aside className="sidebar">{view === 'settings' ? <>
-      <button className="back settings-return" onClick={() => setView(settingsReturn)}>← 보관함으로 돌아가기</button><div className="settings-sidebar-title">설정</div><nav className="nav settings-nav" aria-label="설정 메뉴">{settingsTabs.map(([id, title, icon]) => <button key={id} className={settingsTab === id ? 'active' : ''} onClick={() => setSettingsTab(id)}><Icon name={icon}/>{title}</button>)}</nav>
+      <SettingsSidebar/>
     </> : <>
       <div className="brand"><span className="label">내 보관함</span></div>
       <button className="primary sidebar-create" onClick={newRecording} disabled={!loaded}><Icon name="mic"/><span className="label">새 녹음</span></button>
@@ -309,8 +298,8 @@ export default function App({ workspaceActive = true, liveActive = false, onWork
     </>}
       <div className="sidebar-bottom">{liveActive ? <button className="background-recording" onClick={() => onWorkspaceChange('live', 'recording')}><Icon name="mic"/><span className="label">Live 녹음으로 돌아가기</span></button> : null}{busy && draftOpen ? <button className="background-recording" onClick={() => { setSelectedId(null); setView('workspace'); }}><Icon name="mic"/><span className="label">녹음으로 돌아가기</span></button> : null}<TaskPanel active={workspaceActive} environment={backgroundEnvironment} notes={notes} onCancel={cancelBackgroundJob} onOpen={openBackgroundJob}/>{view !== 'settings' ? <button className="settings" onClick={openSettings} title="설정"><Icon name="settings"/><span className="label">설정</span></button> : null}</div>
     </aside>
-    <main className="main">
-      {view === 'settings' ? <header className="topbar"><span className="settings-breadcrumb">설정 / {settingsTabs.find(item => item[0] === settingsTab)?.[1]}</span></header> : null}
+    <main className="main">{recovery ? <p className="recovery-message" role="status">보관함 목록을 {recovery.backup ? "백업과 녹음 메타데이터" : "녹음 메타데이터"}로 복구했습니다. {recovery.skipped ? `${recovery.skipped}개 항목은 읽지 못해 복구에서 제외했습니다. 원본 파일은 보존됩니다. ` : ""}{!recovery.backup ? "빈 폴더 등 메타데이터에 없는 정보는 복구되지 않을 수 있습니다." : "백업 시점 이후의 빈 폴더 변경은 확인이 필요합니다."}<button className="secondary" onClick={() => setRecovery(null)}>확인</button></p> : null}
+
       {view === 'list' && filter === 'all' ? <HomePage mode="work" loaded={loaded} busy={busy} notes={notes} folders={folders} parents={folderParents} recent={recent} jobs={backgroundEnvironment.queue.filter(job => !job.workspace || job.workspace === 'work')} recording={busy && draftOpen ? { title: 'Work 녹음', status: '녹음으로 돌아가 계속 기록하세요.', onOpen: () => { setSelectedId(null); setView('workspace'); } } : null} onRecord={newRecording} onImport={importAudio} onLibrary={() => navigate('library')} onRoot={() => navigate('')} onJob={openBackgroundJob}
         renderNote={note => <NoteCard key={note.id} note={note} onOpen={() => openNote(note.id)} onMenu={(event, context) => openActions(event, { type: 'note', id: note.id, folder: note.folder, deleted: note.deleted }, context)} editing={renaming?.type === 'note' && renaming.id === note.id} onRename={title => changeNoteFromMenu(note.id, { title })} onCancelRename={() => setRenaming(null)}/>}
         renderFolder={folder => <FolderCard key={folder} folder={folder} name={leafName(folder, folderParents)} onOpen={() => navigate(folder)} onMenu={(event, context) => openFolderMenu(event, folder, context)}/>}
@@ -320,12 +309,12 @@ export default function App({ workspaceActive = true, liveActive = false, onWork
           <div className="folder-collection">{creatingFolder !== null ? <FolderCard key="new-folder" name="" creating editing onRename={saveNewFolder} onCancelRename={() => setCreatingFolder(null)}/> : null}
           {children.map(folder => <FolderCard key={folder} folder={folder} name={leafName(folder, folderParents)} onOpen={() => navigate(folder)} onMenu={(event, context) => openFolderMenu(event, folder, context)} editing={renaming?.type === 'folder' && renaming.id === folder} onRename={name => renameFolder(folder, name)} onCancelRename={() => setRenaming(null)}/>)}
           </div><div className="recording-collection">{layout === 'list' && visible.length ? <div className="table-head"><span>녹음 제목</span><span className="date">녹음 날짜</span><span className="duration">녹음 길이</span><span>변환 상태</span><span/></div> : null}
-          {visible.length ? visible.map(note => <NoteCard key={note.id} note={note} selected={selection.ids.includes(note.id)} selectable={filter === 'trash'} checked={selectedTrash.includes(note.id)} selectionDisabled={trashWorking} onCheck={checked => setTrashSelection(ids => checked ? [...new Set([...ids,note.id])] : ids.filter(id => id !== note.id))} onOpen={event => selection.open(event, note, () => openNote(note.id))} onMenu={(event, context) => openActions(event, { type: 'note', id: note.id, folder: note.folder, deleted: note.deleted }, context)} editing={renaming?.type === 'note' && renaming.id === note.id} onRename={title => changeNoteFromMenu(note.id, { title })} onCancelRename={() => setRenaming(null)}/>) : children.length || creatingFolder !== null ? null : <div className="empty library-empty"><span className="empty-icon"><Icon name={filter === 'trash' ? 'trash' : 'file'}/></span><h2>{filter === 'trash' ? '휴지통이 비어 있습니다' : '첫 녹음을 남겨보세요'}</h2><p>{filter === 'trash' ? '휴지통으로 옮긴 녹음이 여기에 표시됩니다.' : '목소리로 남긴 기록을 문서처럼 모아보세요.'}</p>{filter !== 'trash' ? <button className="secondary" onClick={importAudio} disabled={!loaded || busy}><Icon name="upload"/>오디오 파일 불러오기</button> : null}</div>}
+          {visible.length ? visible.map(note => <NoteCard key={note.id} note={note} layout={layout} selected={selection.ids.includes(note.id)} selectable={filter === 'trash'} checked={selectedTrash.includes(note.id)} selectionDisabled={trashWorking} onCheck={checked => setTrashSelection(ids => checked ? [...new Set([...ids,note.id])] : ids.filter(id => id !== note.id))} onOpen={event => selection.open(event, note, () => openNote(note.id))} onMenu={(event, context) => openActions(event, { type: 'note', id: note.id, folder: note.folder, deleted: note.deleted }, context)} editing={renaming?.type === 'note' && renaming.id === note.id} onRename={title => changeNoteFromMenu(note.id, { title })} onCancelRename={() => setRenaming(null)}/>) : children.length || creatingFolder !== null ? null : <div className="empty library-empty"><span className="empty-icon"><Icon name={filter === 'trash' ? 'trash' : 'file'}/></span><h2>{filter === 'trash' ? '휴지통이 비어 있습니다' : '첫 녹음을 남겨보세요'}</h2><p>{filter === 'trash' ? '휴지통으로 옮긴 녹음이 여기에 표시됩니다.' : '목소리로 남긴 기록을 문서처럼 모아보세요.'}</p>{filter !== 'trash' ? <button className="secondary" onClick={importAudio} disabled={!loaded || busy}><Icon name="upload"/>오디오 파일 불러오기</button> : null}</div>}
         </div></div>
       </section> : null}
       {draftOpen ? <div className="workspace-host" hidden={view !== 'workspace' || selectedId !== null}><NoteDetail workspaceActive={workspaceActive} note={null} environment={environment} folders={folders} folderParents={folderParents} initialFolder={draftFolder} onFinish={finishRecording} onDiscard={discardDraft} onBusy={setBusy} onNotice={toast} preferences={preferences} onPreferences={changePreferences} draftKey={draftKey} onBack={() => navigate(filter)}/></div> : null}
-      {selected && (view === 'workspace' || (view === 'settings' && settingsReturn === 'workspace')) ? <div className="workspace-host" hidden={view !== 'workspace'}><NoteDetail workspaceActive={workspaceActive} note={selected} environment={environment} folders={folders} folderParents={folderParents} onCopy={copyTranscript} onConvert={convertSelected} onCancel={() => cancelTranscription(selected.id)} onBack={() => navigate(filter)} onUpdate={change => updateNote(selected.id, change)} onExport={exportTranscript}/></div> : null}
-      {view === 'settings' ? <TranscriptionSettings tab={settingsTab} environment={environment} appInfo={appInfo} storagePath={storagePath} preferences={preferences} onPreferences={changePreferences} layout={layout} onLayout={changeLayout} onCheck={checkEnvironment} onConfigure={configureEnvironment} onImport={importModel} onInstall={installModels} onDelete={deleteModel} onCancel={cancelTranscription} onOpenStorage={openStorage}/> : null}
+      {selected && (view === 'workspace' || (view === 'settings' && pageView === 'workspace')) ? <div className="workspace-host" hidden={view !== 'workspace'}><NoteDetail workspaceActive={workspaceActive} note={selected} environment={environment} folders={folders} folderParents={folderParents} onCopy={copyTranscript} onConvert={convertSelected} onCancel={() => cancelTranscription(selected.id)} onBack={() => navigate(filter)} onUpdate={change => updateNote(selected.id, change)} onExport={exportTranscript}/></div> : null}
+      {view === 'settings' ? <SettingsPage mode="work"/> : null}
     </main>
     {actionMenu ? <ActionMenu target={actionMenu} folders={folders} parents={folderParents} onClose={closeActionMenu} onRename={beginRename} onMove={(id, folder) => changeNoteFromMenu(id, { folder })} onTrash={(id, deleted) => deleted ? changeNoteFromMenu(id, { deleted }) : processTrash([id])} onDeleteFolder={folder => setModal({type:'delete-folder',folder})}/> : null}
     {modal?.type === 'delete-folder' ? <Modal title="폴더 삭제" onClose={() => { if (!trashWorking) closeModal(); }}><p className="hint">{modal.folder} 및 하위 폴더를 삭제합니다. 폴더 안의 녹음은 휴지통으로 이동하며, 복구하면 내 보관함에 저장됩니다.</p><button className="primary full-width danger" disabled={trashWorking} onClick={() => removeFolder(modal.folder)}>{trashWorking ? '처리 중…' : '폴더 삭제'}</button></Modal> : null}

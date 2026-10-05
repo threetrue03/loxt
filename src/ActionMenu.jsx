@@ -30,7 +30,7 @@ export default function ActionMenu({ target, folders, parents, onClose, onRename
     const panel = root.current;
     const place = () => { const box = panel.getBoundingClientRect(); panel.style.left = `${Math.max(8, Math.min(target.x, innerWidth - box.width - 8))}px`; panel.style.top = `${Math.max(8, Math.min(target.y, innerHeight - box.height - 8))}px`; };
     const observer = new ResizeObserver(place); observer.observe(panel); place();
-    if (!moving) panel.querySelector('[role="menuitem"]')?.focus();
+    if (!moving && !panel.contains(document.activeElement)) panel.querySelector('[role="menuitem"]')?.focus();
     const outside = event => { if (!panel.contains(event.target) && !sub.current?.contains(event.target) && !(target.trigger?.matches('button.more') && target.trigger.contains(event.target))) onClose(); };
     const key = event => {
       if (event.key === 'Escape') { event.preventDefault(); if (moving) { setMoving(false); moveButton.current?.focus(); } else { onClose(); target.trigger?.focus(); } }

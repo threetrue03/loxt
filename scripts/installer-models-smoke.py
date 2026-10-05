@@ -23,7 +23,8 @@ source = ROOT / 'harness.nsi'
 source.write_text(r'''
 Unicode true
 RequestExecutionLevel user
-Name "Sorinote model installer test"
+Name "LOXT model installer test"
+Var TestDownload
 OutFile "harness.exe"
 !include MUI2.nsh
 !include "__INCLUDE__"
@@ -52,14 +53,14 @@ Section
   FileClose $0
   ${GetParameters} $0
   ClearErrors
-  ${GetOptions} $0 "/DOWNLOAD=" $1
-  ${If} $1 == "1"
+  ${GetOptions} $0 "/DOWNLOAD=" $TestDownload
+  ${If} $TestDownload == "1"
     !insertmacro customInstall
     FileOpen $0 "__DOWNLOAD_RESULT__" w
     FileWrite $0 $SorinoteModelResult
     FileClose $0
   ${EndIf}
-  ${If} $1 != "1"
+  ${If} $TestDownload != "1"
     StrCpy $SorinoteModels ""
   ${EndIf}
   Sleep 1200
@@ -203,19 +204,19 @@ def run_case(selected, download=False):
         def model_page():
             for hwnd in windows(process.pid):
                 checks = [(child, label) for child, label in controls(hwnd)
-                          if label.startswith(('최적화 (small)', '표준 (large-v3-turbo)', '고성능 (large-v3)'))]
+                          if label.startswith(('저성능 (small)', '표준 (large-v3-turbo)', '고성능 (large-v3)'))]
                 if len(checks) == 3:
                     return hwnd, checks
         hwnd, checks = wait_for(model_page)
         user32.ShowWindow(hwnd, 0)
         for child, label in checks:
-            name = 'small' if label.startswith('최적화') else 'large-v3-turbo' if label.startswith('표준') else 'large-v3'
+            name = 'small' if label.startswith('저성능') else 'large-v3-turbo' if label.startswith('표준') else 'large-v3'
             user32.SendMessageW(child, 0xF1, int(name in selected), 0)  # BM_SETCHECK
         # Hidden test dialogs may be inactive; send the button's normal command.
         user32.SendMessageW(hwnd, 0x111, 1, user32.GetDlgItem(hwnd, 1))  # WM_COMMAND / BN_CLICKED
         if selected:
             def preparation_page():
-                return next((child for child, label in controls(hwnd) if label.startswith('설치한 모델의 전사 환경까지')), None)
+                return next((child for child, label in controls(hwnd) if label.startswith('설치한 모델의 변환 환경까지')), None)
             preparation = wait_for(preparation_page)
             wait_for(lambda: any('체크를 해제하면 모델 파일만' in label for _, label in controls(hwnd)))
             for child, label in controls(hwnd):
@@ -234,7 +235,7 @@ def run_case(selected, download=False):
             user32.PostMessageW(hwnd, 0x111, 1, user32.GetDlgItem(hwnd, 1))
         def progress_page():
             items = {user32.GetDlgCtrlID(child): (child, label) for child, label in controls(hwnd)}
-            return items if 1800 in items else None
+            return items if all(key in items for key in [1800, 1801, 1802, 1803, 1804, 1805]) else None
         try:
             items = wait_for(progress_page)
         except RuntimeError:
@@ -250,7 +251,12 @@ def run_case(selected, download=False):
         if download:
             # App files finish first; preparation uses a cancellable custom page.
             (ROOT / 'download.txt').unlink(missing_ok=True)
-            wait_for(lambda: any(label == '프로그램 파일 설치 완료' for _, label in controls(hwnd)))
+            wait_for(lambda: user32.IsWindowEnabled(user32.GetDlgItem(hwnd, 1)))
+            user32.PostMessageW(hwnd, 0x111, 1, user32.GetDlgItem(hwnd, 1))
+            try: wait_for(lambda: any(label == '프로그램 파일 설치 완료' for _, label in controls(hwnd)))
+            except RuntimeError:
+                print('PROGRESS_CONTROLS', [label for _,label in controls(hwnd)], flush=True)
+                raise
             if download == 'fixture':
                 observed = set()
                 deadline = time.monotonic() + 30
@@ -265,7 +271,7 @@ def run_case(selected, download=False):
                             time.sleep(.4)  # Allow Windows' native progress animation to settle.
                             capture_test_window(hwnd)
                     time.sleep(.1)
-                assert any('최적화 (small) · 모델 1/2' in item for item in observed), observed
+                assert any('저성능 (small) · 모델 1/2' in item for item in observed), observed
                 assert any('표준 (large-v3-turbo) · 모델 2/2' in item for item in observed), observed
             wait_for(lambda: progress_page()[1800][1] == '준비 완료', timeout=120)
             items = progress_page()
@@ -286,7 +292,7 @@ def finish_tests():
     desktop = ROOT / 'test-desktop'
     app_root.mkdir(); desktop.mkdir()
     marker = ROOT / 'app-ran.txt'
-    shortcut = desktop / '소리노트.lnk'
+    shortcut = desktop / 'LOXT.lnk'
     stub = ROOT / 'stub.nsi'
     stub.write_text(r'''
 Unicode true
@@ -315,7 +321,7 @@ Var newDesktopLink
 Function .onInit
   StrCpy $INSTDIR "__APP__"
   StrCpy $newDesktopLink "__SHORTCUT__"
-  StrCpy $SorinoteFinishTitle "소리노트 설치 완료"
+  StrCpy $SorinoteFinishTitle "LOXT 설치 완료"
   StrCpy $SorinoteFinishText "테스트 설치를 완료했습니다. 마침에서 선택한 동작을 확인합니다."
 FunctionEnd
 Section
@@ -334,7 +340,7 @@ SectionEnd
             def find_finish():
                 for hwnd in windows(process.pid):
                     choices = {label: child for child, label in controls(hwnd)
-                               if label in ['소리노트 실행하기', '바탕화면 바로가기 만들기']}
+                               if label in ['LOXT 실행하기', '바탕화면 바로가기 만들기']}
                     if len(choices) == 2:
                         return hwnd, choices
                     button = user32.GetDlgItem(hwnd, 1)
@@ -344,9 +350,9 @@ SectionEnd
                         user32.SendMessageW(hwnd, 0x111, 1, button)
             hwnd, choices = wait_for(find_finish)
             user32.ShowWindow(hwnd, 0)
-            assert user32.SendMessageW(choices['소리노트 실행하기'], 0xF0, 0, 0) == 1
+            assert user32.SendMessageW(choices['LOXT 실행하기'], 0xF0, 0, 0) == 1
             assert user32.SendMessageW(choices['바탕화면 바로가기 만들기'], 0xF0, 0, 0) == 1
-            user32.SendMessageW(choices['소리노트 실행하기'], 0xF1, int(run), 0)
+            user32.SendMessageW(choices['LOXT 실행하기'], 0xF1, int(run), 0)
             user32.SendMessageW(choices['바탕화면 바로가기 만들기'], 0xF1, int(link), 0)
             assert not marker.exists() and not shortcut.exists(), 'Actions occurred before Finish'
             if run and link:

@@ -28,7 +28,7 @@ class ConversionQueue {
       if (!note || note.deleted) throw new Error('변환할 녹음을 찾지 못했습니다.');
       if (this.closed) throw new Error('앱을 종료하고 있습니다.');
       if (this.active?.id === id || this.waiting.some(job => job.id === id)) throw new Error('이미 변환 목록에 있는 녹음입니다.');
-      const settings = validateSettings({ model: payload?.model || this.engine.state.model, device: 'auto' }, await this.engine.catalogue());
+      const settings = validateSettings({ model: payload?.model || this.defaults?.(workspace) || this.engine.state.model, device: 'auto' }, await this.engine.catalogue());
       await library.getAudio(id);
       await library.setTranscription(id, { status: 'queued', transcriptionError: '' });
       this.waiting.push({ id, title: note.title, model: settings.model, ...(workspace === 'live' ? { workspace } : {}) }); this.emit(); this.kick();
@@ -43,7 +43,7 @@ class ConversionQueue {
   }
   async run(job) {
     try {
-      await this.engine.configure({ model: job.model, device: 'auto' });
+      await this.engine.configure({ model: job.model, device: 'auto' }, { persist: false });
       if (job.cancelled || this.closed) throw new Error('cancelled');
       await this.engine.startAutomatic(job.id, this.store(job.workspace)); job.started = true;
       this.changed();

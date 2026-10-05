@@ -13,9 +13,21 @@ const entries = asar.listPackage(archive);
 if (entries.some(file => /[\\/](test-results|scripts|ui-preview\.html)([\\/]|$)/.test(file))) throw new Error('Test/source-only files included in the application');
 const packaged = JSON.parse(asar.extractFile(archive, 'package.json').toString());
 if (packaged.version !== pkg.version) throw new Error('Packaged version mismatch');
+async function verifyRenderer(directory = 'dist') {
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const filename = path.join(directory, entry.name);
+    if (entry.isDirectory()) await verifyRenderer(filename);
+    else if (entry.isFile() && !asar.extractFile(archive, filename).equals(await readFile(filename))) throw new Error(`Packaged renderer mismatch: ${filename}`);
+  }
+}
+await verifyRenderer();
 for (const filename of await readdir('electron')) {
   if (!filename.endsWith('.cjs')) continue;
   if (!asar.extractFile(archive, `electron/${filename}`).equals(await readFile(path.join('electron', filename)))) throw new Error(`Packaged source mismatch: ${filename}`);
+}
+for (const filename of await readdir('shared')) {
+  if (!filename.endsWith('.js')) continue;
+  if (!asar.extractFile(archive, `shared/${filename}`).equals(await readFile(path.join('shared', filename)))) throw new Error(`Packaged shared source mismatch: ${filename}`);
 }
 for (const filename of await readdir('python')) {
   if (!/\.(py|txt)$/.test(filename)) continue;
