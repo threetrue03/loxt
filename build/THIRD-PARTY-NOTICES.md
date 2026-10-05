@@ -1,6 +1,6 @@
 # LOXT — Third-party notices
 
-확인일: 2026-10-04 · 소스 버전: 1.12.0
+확인일: 2026-10-05 · 소스 버전: 1.13.0
 
 LOXT 자체 코드의 저작권은 Copyright (c) 2026 threetrue03이며 MIT로 공개합니다. 아래 모델, 라이브러리, 글꼴, 실행 도구의 권리는 각 원 저작권자에게 있습니다. 이 고지는 외부 구성요소의 라이선스를 변경하지 않습니다. LOXT 로고는 별도 브랜드 사용 안내를 따릅니다.
 
@@ -89,3 +89,10 @@ GPLv3 원문: https://www.gnu.org/licenses/gpl-3.0.txt
 이 문서는 주요 구성요소의 출처·저작권 안내입니다. 모든 전이 의존성에 대한 SBOM이나 완성된 재배포 감사 결과는 아닙니다. 설치 파일을 변경·재배포할 때 각 배포본의 원문과 대응 소스를 확인해야 합니다.
 
 로컬 녹음과 스크립트는 사용자 PC에 저장됩니다. 환경 준비에는 PyPI, Hugging Face, 공식 GitHub release 등에 접속하며, YouTube 가져오기는 YouTube와 미디어 서버에 접속합니다. 녹음을 클라우드 전사 서비스로 업로드하지 않습니다.
+
+
+## 메모 편집기 (1.13.0)
+
+BlockNote core / react / mantine / code-block / math-block 0.55.0은 TypeCellOS 및 BlockNote 기여자가 제공하며 MPL-2.0입니다. 원본 패키지 소스는 수정하지 않았습니다. LOXT의 자체 코드에는 MIT가 유지됩니다. BlockNote 소스와 라이선스는 https://github.com/TypeCellOS/BlockNote 및 https://www.npmjs.com/package/@blocknote/core/v/0.55.0 에서 확인할 수 있습니다. 설치본의 `resources/editor-licenses/`에 각 패키지의 저작권·라이선스 원문을 함께 배포합니다. GPL 상용 확장 패키지(`@blocknote/xl-*`)는 사용하지 않습니다.
+
+Mantine 8.3.11, Tiptap/ProseMirror, Shiki, KaTeX, Floating UI, sanitize-html 2.18.0 등 편집기 의존성은 각 제공자의 라이선스를 따릅니다. 정확한 버전·라이선스·소스 주소 목록은 `editor-licenses/index.json` 및 저장소의 `docs/licenses/editor-packages.json`에 기록합니다. BlockNote MPL-2.0 원문은 `docs/licenses/BlockNote-MPL-2.0.txt`에도 보관합니다.

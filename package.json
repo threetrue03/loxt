@@ -1,6 +1,6 @@
 {
   "name": "sorinote-desktop",
-  "version": "1.12.0",
+  "version": "1.13.0",
   "private": true,
   "description": "LOXT 로컬 전사 데스크톱 앱",
   "author": "LOXT",
@@ -16,19 +16,28 @@
     "preview:design": "npm run build && node scripts/preview-design.mjs",
     "bundle:python": "node scripts/bundle-python.mjs",
     "assets": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-icon.ps1",
-    "package": "npm run bundle:python && npm run bundle:youtube && npm run assets && npm run build && electron-builder --dir --win --x64",
-    "package:installer": "npm run bundle:python && npm run bundle:youtube && npm run assets && npm run build && node scripts/package-installer.cjs && node scripts/release-manifest.mjs",
-    "test:release": "node --test scripts/release.test.cjs scripts/automatic-transcription.test.cjs scripts/external-models.test.cjs scripts/conversion-queue.test.cjs scripts/nested-folders.test.cjs scripts/trash.test.cjs scripts/library-interactions.test.cjs scripts/workspace-libraries.test.cjs scripts/transcript-timestamps.test.cjs scripts/live.test.cjs scripts/youtube.test.cjs scripts/appearance.test.cjs scripts/improvements.test.cjs scripts/settings.test.cjs",
+    "package": "npm run bundle:python && npm run bundle:youtube && npm run assets && node scripts/editor-notices.mjs && npm run build && electron-builder --dir --win --x64",
+    "package:installer": "npm run bundle:python && npm run bundle:youtube && npm run assets && node scripts/editor-notices.mjs && npm run build && node scripts/package-installer.cjs && node scripts/release-manifest.mjs",
+    "test:release": "node --test scripts/release.test.cjs scripts/automatic-transcription.test.cjs scripts/external-models.test.cjs scripts/conversion-queue.test.cjs scripts/nested-folders.test.cjs scripts/trash.test.cjs scripts/library-interactions.test.cjs scripts/workspace-libraries.test.cjs scripts/transcript-timestamps.test.cjs scripts/live.test.cjs scripts/youtube.test.cjs scripts/appearance.test.cjs scripts/improvements.test.cjs scripts/settings.test.cjs scripts/memos.test.cjs",
     "test:worker-pool": "node --test scripts/work-worker.test.cjs",
     "test:live": "npm run build && node scripts/live-smoke.mjs",
     "bundle:youtube": "node scripts/bundle-youtube.mjs",
     "test:youtube": "npm run build && node scripts/youtube-smoke.mjs",
     "test:settings": "npm run build && node scripts/settings-ui-smoke.mjs",
-    "test:theme": "npm run build && node scripts/theme-smoke.mjs"
+    "test:theme": "npm run build && node scripts/theme-smoke.mjs",
+    "test:memos": "npm run build && node scripts/memo-ui-smoke.mjs"
   },
   "dependencies": {
+    "@blocknote/code-block": "0.55.0",
+    "@blocknote/core": "0.55.0",
+    "@blocknote/mantine": "0.55.0",
+    "@blocknote/math-block": "0.55.0",
+    "@blocknote/react": "0.55.0",
+    "@mantine/core": "8.3.11",
+    "@mantine/hooks": "8.3.11",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "sanitize-html": "2.18.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "6.1.1",
@@ -79,6 +88,13 @@
         "filter": [
           "yt-dlp.exe",
           "version.json"
+        ]
+      },
+      {
+        "from": "build/editor-licenses",
+        "to": "editor-licenses",
+        "filter": [
+          "**/*"
         ]
       }
     ],

@@ -7,14 +7,14 @@
 
   <h1>LOXT</h1>
   <p><strong>Local Speech-to-Text powered by your own hardware.</strong></p>
-  <p>내 컴퓨터에서 녹음하고, 변환하고, 정리하는 로컬 음성 기록 앱.</p>
+  <p>내 컴퓨터에서 녹음하고, 변환하고, 메모하는 로컬 기록 앱.</p>
 
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="LOXT 코드 라이선스: MIT"></a>
   <img src="https://img.shields.io/badge/Platform-Windows_x64-0078D4.svg" alt="Windows x64">
-  <img src="https://img.shields.io/badge/Source-1.12.0-59695D.svg" alt="소스 버전 1.12.0">
+  <img src="https://img.shields.io/badge/Source-1.13.0-59695D.svg" alt="소스 버전 1.13.0">
 
   <p>
-    <a href="https://github.com/threetrue03/loxt/releases"><strong>Windows 다운로드</strong></a> ·
+    <a href="https://github.com/threetrue03/loxt/releases/download/v1.13.0/LOXT-Setup-1.13.0-x64.exe"><strong>Windows 다운로드 · v1.13.0</strong></a> ·
     <a href="https://loxt.pages.dev/">소개 사이트</a> ·
     <a href="https://github.com/threetrue03/loxt/issues">버그 신고 · 기능 제안</a>
   </p>
@@ -22,7 +22,7 @@
 
 ---
 
-LOXT는 Whisper 기반 음성 인식을 내 PC에서 실행하는 Windows 데스크톱 앱입니다. **Work**에서는 녹음이나 파일을 스크립트로 변환하고, **Live**에서는 녹음 중 스크립트를 계속 추가합니다. 두 작업 공간의 기록을 따로 관리하면서 모델은 함께 사용할 수 있습니다.
+LOXT는 Whisper 기반 음성 인식을 내 PC에서 실행하는 Windows 데스크톱 앱입니다. **Work**에서는 녹음이나 파일을 스크립트로 변환하고, 녹음 옆 메모나 독립 문서를 작성합니다. **Live**에서는 녹음 중 스크립트를 계속 추가합니다. 두 작업 공간의 기록을 따로 관리하면서 모델은 함께 사용할 수 있습니다.
 
 NVIDIA GPU가 있으면 CUDA로 변환하고, 지원하는 GPU가 없는 환경에서는 CPU를 사용합니다. 로컬 녹음과 스크립트를 클라우드 음성 인식 서비스에 업로드하지 않습니다.
 
@@ -31,10 +31,23 @@ NVIDIA GPU가 있으면 CUDA로 변환하고, 지원하는 GPU가 없는 환경�
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./docs/assets/workspace-dark.png">
   <source media="(prefers-color-scheme: light)" srcset="./docs/assets/workspace-light.png">
-  <img src="./docs/assets/workspace-dark.png" alt="LOXT 1.12.0 Work 홈: 녹음 시작, 파일·YouTube 불러오기, 최근 기록과 폴더" width="100%">
+  <img src="./docs/assets/workspace-dark.png" alt="LOXT 1.13.0 Work 홈: 녹음·파일·YouTube 불러오기, 새 메모, 최근 기록과 폴더" width="100%">
 </picture>
 
-*LOXT 1.12.0 실제 앱의 다크·라이트 테마 화면입니다. 녹음과 스크립트는 소개용 예시 데이터이며 인식 정확도나 변환 속도의 측정 결과가 아닙니다.*
+*LOXT 1.13.0 실제 앱의 다크·라이트 테마 화면입니다. 녹음·스크립트·메모는 소개용 예시 데이터이며 인식 정확도나 변환 속도의 측정 결과가 아닙니다.*
+
+## 1.13.0에서 달라진 점
+
+- **녹음 메모:** 스크립트의 내보내기 오른쪽에서 메모 패널을 열고 재생하면서 메모합니다. 다시 변환해도 메모는 유지됩니다.
+- **독립 메모:** Work의 `새로 추가하기 → 새 메모`로 문서를 만들고 녹음과 같은 보관함·폴더·휴지통에서 관리합니다.
+- **블록 편집:** Markdown 입력, `/` 블록 메뉴, 텍스트 서식, 제목·목록·토글·표·코드·수식·이미지·파일 첨부를 지원합니다.
+- **저장과 내보내기:** 자동 저장·실패 후 재시도·본문 백업·문서 검색·Markdown/HTML/PDF 내보내기를 제공합니다.
+
+[메모 사용 안내](./docs/MEMOS.md) · [1.13.0 릴리스 안내](./docs/release-1.13.0.md) · [검증 기록](./docs/verification-1.13.0.md)
+
+<img src="./landing/public/assets/recording-memo.png" alt="LOXT 1.13.0 스크립트 오른쪽 메모 패널과 원본 재생바" width="100%">
+
+*내보내기 오른쪽의 메모 버튼으로 패널을 열고, 원본을 들으면서 작성합니다. 새 메모 화면과 검증 범위는 위 검증 기록에서 확인할 수 있습니다.*
 
 ## 1.12.0에서 달라진 점
 
@@ -72,7 +85,7 @@ NVIDIA GPU가 있으면 CUDA로 변환하고, 지원하는 GPU가 없는 환경�
 
 업데이트할 때도 새 버전의 설치 파일을 실행합니다. 기존 녹음·스크립트·폴더·모델·설정과 저장 위치를 유지하며, 모델과 환경 구성요소는 상태를 확인해 재사용하거나 준비합니다. 실행 장치는 자동으로 선택합니다.
 
-> 이 README는 **소스 버전 1.12.0**을 기준으로 작성했습니다. 공개된 설치 파일의 버전은 Releases에서 확인하세요. 저장소의 소스와 최신 배포 파일의 버전은 다를 수 있습니다.
+> 이 README는 **소스 버전 1.13.0**을 기준으로 작성했습니다. 공개된 설치 파일의 버전은 Releases에서 확인하세요. 저장소의 소스와 최신 배포 파일의 버전은 다를 수 있습니다.
 
 ### 실행 환경
 
@@ -122,7 +135,7 @@ Work와 Live의 보관함은 분리되어 있으며 모델 설치와 화면 테�
 
 모델이 설치됐는지와 실제로 실행 확인을 마쳤는지는 별도 상태입니다. 다운로드는 실제 진행률로, 준비·검사는 해당 단계의 문구로 표시합니다. 진행 중인 녹음·변환 때문에 모델 관리가 제한되면 이유를 안내합니다.
 
-<img src="./landing/public/assets/models.png" alt="LOXT 1.12.0 모델 보관함: 설치 상태, Work·Live 기본 모델, PC 추천, 설치 버튼" width="100%">
+<img src="./landing/public/assets/models.png" alt="LOXT 1.13.0 모델 보관함: 설치 상태, Work·Live 기본 모델, PC 추천, 설치 버튼" width="100%">
 
 *별도 예시 프로필에서 촬영한 모델 관리 화면입니다.*
 
@@ -156,7 +169,7 @@ Work와 Live의 보관함은 분리되어 있으며 모델 설치와 화면 테�
 
 | 경로 | 내용 |
 | --- | --- |
-| `library/` | Work 녹음·스크립트·폴더 |
+| `library/` | Work 녹음·스크립트·폴더·메모·첨부파일 |
 | `live-library/` | Live 녹음·스크립트·폴더 |
 | `transcription/` | 다운로드한 모델과 전용 실행 환경 |
 | `appearance.json` | 테마 설정 |
@@ -187,11 +200,12 @@ npm run dev
 | `npm run test:worker-pool` | 연속 Work 변환의 모델 재사용·해제 검증 |
 | `npm run test:settings` | 별도 테스트 프로필에서 설정 UI 검증 |
 | `npm run test:theme` | 앱의 다크·라이트 테마 검증 |
+| `npm run test:memos` | 별도 테스트 프로필에서 메모 작성·저장·첨부·내보내기 검증 |
 | `npm run package:installer` | Windows x64 설치 파일 생성 |
 
 설치 파일 출력 위치: `release/stage5/`. 패키징은 Python·YouTube 도구 준비, 아이콘 생성, 앱 빌드를 함께 수행하며 인터넷 연결이 필요할 수 있습니다. 실제 음성·GPU·Live 검증에는 준비된 모델과 입력 장치가 필요합니다.
 
-버전별 검증 결과와 확인하지 못한 범위는 [1.12.0 검증 기록](./docs/verification-1.12.0.md)과 [1.11.0 검증 기록](./docs/verification-1.11.0.md)에 정리되어 있습니다.
+버전별 검증 결과와 확인하지 못한 범위는 [1.13.0 검증 기록](./docs/verification-1.13.0.md), [1.12.0 검증 기록](./docs/verification-1.12.0.md), [1.11.0 검증 기록](./docs/verification-1.11.0.md)에 정리되어 있습니다.
 
 ### 저장소 구조
 
@@ -208,6 +222,8 @@ docs/         설계, 검증 기록, 모델 라이선스와 원문
 ```
 
 소개 사이트 개발 방법은 [landing/README.md](./landing/README.md)를 참고하세요.
+
+승인된 기능 구현 후에는 [릴리스 마무리 절차](./docs/RELEASE-WORKFLOW.md)에 따라 README·릴리스 문구·앱 캡처·소개 사이트·다운로드 링크·배포 ZIP과 Git 명령어를 함께 준비합니다. 사이트의 캡처·빌드·검사·ZIP 생성은 프로젝트 루트에서 `node landing/scripts/release.mjs`로 실행합니다. GitHub 푸시와 외부 배포는 별도 실행합니다.
 
 ## 기여하기
 

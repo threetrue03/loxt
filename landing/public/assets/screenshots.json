@@ -1,9 +1,9 @@
 {
-  "version": "1.12.0",
+  "version": "1.13.0",
   "examples": true,
   "liveInference": false,
   "exampleAudio": "silent WAV and scripted transcript/speaker data; not accuracy or speed measurements",
-  "capturedAt": "2026-10-05T00:13:25.883Z",
+  "capturedAt": "2026-10-05T03:28:18.391Z",
   "images": [
     {
       "file": "workspace.png",
@@ -22,6 +22,24 @@
       "width": 1783,
       "height": 1079,
       "scenario": "speaker-script"
+    },
+    {
+      "file": "recording-memo.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "work-attached-memo"
+    },
+    {
+      "file": "memo.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "work-independent-memo"
+    },
+    {
+      "file": "memo-block-menu.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "work-memo-slash-menu"
     },
     {
       "file": "organize.png",
@@ -76,6 +94,18 @@
       "width": 1783,
       "height": 1079,
       "scenario": "speaker-script-light"
+    },
+    {
+      "file": "light-recording-memo.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "work-attached-memo-light"
+    },
+    {
+      "file": "light-memo.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "work-independent-memo-light"
     },
     {
       "file": "home.png",

@@ -3,6 +3,8 @@ import { mkdir, mkdtemp, writeFile, copyFile } from 'node:fs/promises';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import { Library } from '../../electron/library.cjs';
+import { Memos } from '../../electron/memos.cjs';
+import { randomUUID } from 'node:crypto';
 import { version } from '../release.mjs';
 const root = path.resolve(import.meta.dirname, '../..'), assets = path.join(root, 'landing/public/assets');
 await mkdir(assets, { recursive: true });
@@ -35,6 +37,12 @@ for(const [mode,entries] of [['work',examples],['live',liveExamples]]){
   records[mode].push({...note,title});
  }
 }
+const workLibrary=new Library(path.join(data,'library'));await workLibrary.ready;const memos=new Memos(workLibrary);
+const text=value=>[{type:'text',text:value,styles:{}}];
+const block=(type,value,extra={})=>({id:randomUUID(),type,props:{},content:text(value),children:[],...extra});
+const memoBlocks=[block('heading','다음 회의 준비',{props:{level:1}}),block('paragraph','녹음을 다시 듣고, 결정한 내용과 다음 할 일을 한 문서에 정리합니다.'),block('heading','이번에 결정한 내용',{props:{level:2}}),block('bulletListItem','새로 추가하기에서 녹음 없는 메모도 만들 수 있도록 합니다.'),block('bulletListItem','녹음 옆 메모 패널은 재생바를 유지하고 각각 스크롤합니다.'),block('checkListItem','다크·라이트 화면 검토',{props:{checked:true}}),block('checkListItem','다음 회의에서 사용 흐름 확인',{props:{checked:false}}),block('toggleListItem','검토할 질문',{children:[block('paragraph','스크립트와 메모를 함께 읽을 때 편집 공간이 충분한가요?')]}),{id:randomUUID(),type:'table',props:{},content:{type:'tableContent',rows:[{cells:[text('할 일'),text('상태')]},{cells:[text('화면 검토'),text('진행 중')]},{cells:[text('문서 정리'),text('완료')]}]},children:[]},block('paragraph','')];
+const {note:memoNote}=await memos.create('회의/제품 디자인');await workLibrary.updateNote(memoNote.id,{title:'다음 업데이트를 위한 메모'});await memos.save({id:memoNote.id,revision:0,blocks:memoBlocks});records.work.push({...memoNote,title:'다음 업데이트를 위한 메모'});
+await memos.save({id:records.work[0].id,revision:0,blocks:[block('heading','회의 중 남긴 메모',{props:{level:2}}),block('paragraph','00:12 · 처음 사용하는 사람에게도 자연스럽게 이어지는 흐름'),block('bulletListItem','녹음 → 변환 → 스크립트 확인을 한 화면에서'),block('bulletListItem','메모는 다시 변환해도 유지하기'),block('checkListItem','보관함의 폴더 구성 확인',{props:{checked:true}}),block('paragraph','다음 회의에서는 수정된 화면을 함께 확인합니다.')]});
 const env={...process.env,SORINOTE_TEST:'1',SORINOTE_TEST_DATA:data};delete env.ELECTRON_RUN_AS_NODE;delete env.SORINOTE_DEV;
 const app=await electron.launch({cwd:root,executablePath:path.join(root,'release/stage5/win-unpacked/LOXT.exe'),args:['--use-fake-device-for-media-stream',`--use-file-for-fake-audio-capture=${input}`],env});
 const images=[];
@@ -44,14 +52,17 @@ try{
  await app.evaluate(({BrowserWindow,dialog})=>{const window=BrowserWindow.getAllWindows()[0];window.setSize(1440,900);window.show();dialog.showMessageBox=async()=>({response:0});});
  const scope=mode=>page.locator(`[data-workspace="${mode}"]`);
  const goHome=async mode=>{await scope(mode).getByRole('button',{name:'홈',exact:true}).click();await scope(mode).locator('.home-page').waitFor();};
- const capture=async(name,scenario)=>{await page.evaluate(()=>document.fonts.ready);await page.locator('.toast:visible').waitFor({state:'hidden',timeout:4000});await page.evaluate(()=>document.activeElement?.blur());await page.mouse.move(1400,880);await page.waitForTimeout(350);await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));const encoded=await app.evaluate(async({BrowserWindow})=>(await BrowserWindow.getAllWindows()[0].webContents.capturePage()).toPNG().toString('base64'));const bytes=Buffer.from(encoded,'base64');await writeFile(path.join(assets,name),bytes);images.push({file:name,width:bytes.readUInt32BE(16),height:bytes.readUInt32BE(20),scenario});};
- async function openRecent(mode){await scope(mode).locator('.home-page').getByRole('button',{name:'모두 보기',exact:true}).click();for(const note of records[mode].toReversed()){await scope(mode).getByRole('button',{name:`${note.title} 열기`,exact:true}).click();await scope(mode).getByRole('region',{name:'스크립트',exact:true}).waitFor();await scope(mode).getByRole('button',{name:/녹음 목록/}).click();}await goHome(mode);}
+ const capture=async(name,scenario,preserveFocus=false)=>{await page.evaluate(()=>document.fonts.ready);await page.locator('.toast:visible').waitFor({state:'hidden',timeout:4000});if(!preserveFocus)await page.evaluate(()=>document.activeElement?.blur());await page.mouse.move(1400,880);await page.waitForTimeout(350);await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));const encoded=await app.evaluate(async({BrowserWindow})=>(await BrowserWindow.getAllWindows()[0].webContents.capturePage()).toPNG().toString('base64'));const bytes=Buffer.from(encoded,'base64');await writeFile(path.join(assets,name),bytes);images.push({file:name,width:bytes.readUInt32BE(16),height:bytes.readUInt32BE(20),scenario});};
+ async function openRecent(mode){await scope(mode).locator('.home-page').getByRole('button',{name:'모두 보기',exact:true}).click();for(const note of records[mode].toReversed()){await scope(mode).getByRole('button',{name:`${note.title} 열기`,exact:true}).click();if(note.kind==='memo'){await scope(mode).locator('.memo-editor .bn-editor').waitFor();await scope(mode).getByRole('button',{name:'← 보관함',exact:true}).click();}else{await scope(mode).getByRole('region',{name:'스크립트',exact:true}).waitFor();await scope(mode).getByRole('button',{name:/녹음 목록/}).click();}}await goHome(mode);}
  await scope('work').getByRole('heading',{name:'홈',exact:true}).waitFor();await openRecent('work');
  await page.getByRole('button',{name:'워크스페이스 선택',exact:true}).click();await capture('workspace.png','workspace-menu');await page.keyboard.press('Escape');
  await scope('work').locator('.home-page').getByRole('button',{name:'모두 보기',exact:true}).click();await scope('work').getByRole('button',{name:'카드 보기',exact:true}).click();await capture('library.png','work-library');
- const first=records.work[0],last=records.work.at(-1);
+ const first=records.work[0],last=records.work.filter(note=>note.kind!=='memo').at(-1);
  await scope('work').getByRole('button',{name:`${first.title} 열기`,exact:true}).click();await scope('work').getByRole('region',{name:'스크립트',exact:true}).waitFor();assert.equal(await scope('work').locator('.speaker-badge').count(),5);await capture('script.png','speaker-script');
+ await scope('work').getByRole('button',{name:'메모 열기',exact:true}).click();await scope('work').locator('.memo-panel .bn-editor').waitFor();await capture('recording-memo.png','work-attached-memo');await scope('work').getByRole('button',{name:'메모 닫기',exact:true}).click();
  await scope('work').getByRole('button',{name:/녹음 목록/}).click();await scope('work').getByRole('button',{name:'목록 보기',exact:true}).click();
+ await scope('work').getByRole('button',{name:'다음 업데이트를 위한 메모 열기',exact:true}).click();await scope('work').locator('.memo-editor .bn-editor').waitFor();await capture('memo.png','work-independent-memo');
+ await scope('work').locator('.memo-editor [data-content-type="paragraph"] .bn-inline-content').first().click();await page.keyboard.press('Home');await page.keyboard.type('/');await page.getByRole('listbox').waitFor();await capture('memo-block-menu.png','work-memo-slash-menu',true);await page.keyboard.press('Escape');await page.keyboard.press('Backspace');await scope('work').getByRole('button',{name:'← 보관함',exact:true}).click();
  await scope('work').getByRole('button',{name:`${first.title} 열기`,exact:true}).click({modifiers:['Control']});await scope('work').getByRole('button',{name:`${last.title} 열기`,exact:true}).click({modifiers:['Control']});assert.equal(await scope('work').locator('.note-card.is-selected').count(),2);await capture('organize.png','multi-select');
  await scope('work').getByRole('button',{name:`${last.title} 관리`,exact:true}).click();await page.getByRole('menuitem',{name:'휴지통으로 이동',exact:true}).click();await scope('work').getByRole('button',{name:'휴지통',exact:true}).click();await scope('work').getByRole('checkbox',{name:`${last.title} 선택`,exact:true}).check();await capture('trash.png','trash-selection');
  await scope('work').locator('.sidebar-create').click();await scope('work').getByLabel('녹음 제목',{exact:true}).fill('다음 회의의 시작');await scope('work').getByRole('button',{name:'녹음 시작',exact:true}).click();
@@ -69,6 +80,7 @@ try{
  await setTheme('light');await scope('work').getByRole('button',{name:'테마',exact:true}).click();await capture('theme-settings.png','light-theme-settings');await page.keyboard.press('Escape');
  await scope('work').getByRole('button',{name:'← 돌아가기',exact:true}).click();await goHome('work');await capture('light-home.png','work-home-light');
  await scope('work').getByRole('button',{name:`${first.title} 열기`,exact:true}).click();await scope('work').getByRole('region',{name:'스크립트',exact:true}).waitFor();await capture('light-script.png','speaker-script-light');
+ await scope('work').getByRole('button',{name:'메모 열기',exact:true}).click();await scope('work').locator('.memo-panel .bn-editor').waitFor();await capture('light-recording-memo.png','work-attached-memo-light');await scope('work').getByRole('button',{name:'메모 닫기',exact:true}).click();await scope('work').getByRole('button',{name:/녹음 목록/}).click();await scope('work').getByRole('button',{name:'다음 업데이트를 위한 메모 열기',exact:true}).click();await scope('work').locator('.memo-editor .bn-editor').waitFor();await capture('light-memo.png','work-independent-memo-light');
  await setTheme('dark');await scope('work').getByRole('button',{name:'← 돌아가기',exact:true}).click();await goHome('work');await capture('home.png','work-home');
  await page.getByRole('button',{name:'워크스페이스 선택',exact:true}).click();await page.getByRole('menuitemradio',{name:/^Live/}).click();await scope('live').locator('.home-page').waitFor();await openRecent('live');await capture('live-home.png','live-home');
  await scope('live').locator('.home-start-action').first().click();await scope('live').getByLabel('Live 녹음 제목',{exact:true}).fill('오늘의 팀 미팅');

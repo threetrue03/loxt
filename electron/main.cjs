@@ -20,7 +20,13 @@ nativeTheme.themeSource = 'dark';
 // Keep the existing library and models through the LOXT display-name migration.
 app.setPath('userData', path.join(app.getPath('appData'), 'sorinote-desktop'));
 
-protocol.registerSchemesAsPrivileged([{ scheme: 'sorinote-audio', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true, corsEnabled: true } }]);
+protocol.registerSchemesAsPrivileged(['sorinote-audio','loxt-asset'].map(scheme => ({ scheme, privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true, corsEnabled: true } })));
+const { Memos } = require('./memos.cjs');
+const { exportMemo } = require('./memo-export.cjs');
+let memos, memoPending = false, memoClosing = false, memoCloseAllowed = false, memoFlushReply;
+let pendingMemoIds = new Set();
+ipcMain.on('memos:pending', (event, value) => { if (isTrusted(event.senderFrame) && Array.isArray(value) && value.every(id => typeof id === 'string')) { pendingMemoIds = new Set(value); memoPending = pendingMemoIds.size > 0; } });
+ipcMain.on('memos:flushed', (event, value) => { if (isTrusted(event.senderFrame)) memoFlushReply?.(value); });
 
 const developmentUrl = !app.isPackaged && process.env.SORINOTE_DEV === '1'
   ? 'http://127.0.0.1:5173' : null;
@@ -112,7 +118,21 @@ function createWindow() {
   });
   mainWindow.on('close', async event => {
     const changingData = youtube?.hasJobs || (live?.busy && live.state.stage !== 'ready') || conversions?.hasJobs || transcriber?.requestId || (transcriber?.busy && !['detect', 'live'].includes(transcriber.operation));
-    if (!library?.sessions.size && !workspaceLibraries?.live.sessions.size && !changingData) return;
+    if (!library?.sessions.size && !workspaceLibraries?.live.sessions.size && !changingData) {
+      if (memoCloseAllowed || !memoPending) return;
+      event.preventDefault(); if (memoClosing) return; memoClosing = true;
+      try {
+        const token = require('node:crypto').randomUUID();
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => { memoFlushReply = null; reject(new Error('메모 저장 응답이 없습니다. 메모를 다시 열어 저장 상태를 확인해 주세요.')); }, 10000);
+          memoFlushReply = value => { if (value?.token !== token) return; clearTimeout(timeout); memoFlushReply = null; value.error ? reject(new Error(value.error)) : resolve(); };
+          mainWindow.webContents.send('memos:flush', token);
+        });
+        await library.queue; memoCloseAllowed = true; mainWindow.close();
+      } catch (error) { await dialog.showMessageBox(mainWindow, { type: 'error', title: '메모 저장 실패', message: error.message, detail: '작성 내용을 유지했습니다. 메모에서 다시 시도한 뒤 닫아 주세요.', buttons: ['돌아가기'] }); }
+      finally { memoClosing = false; }
+      return;
+    }
     event.preventDefault();
     if (closingNotice) return;
     closingNotice = true;
@@ -213,6 +233,19 @@ handle('transcription:import-model', async () => {
   });
 });
 handle('library:list', () => library.list());
+handle('memos:create', folder => memos.create(folder || ''));
+handle('memos:get', id => memos.read(id));
+handle('memos:save', payload => memos.save(payload));
+handle('memos:attach', payload => memos.attach(payload));
+handle('memos:copy', async text => { if (typeof text !== 'string' || text.length > 5_000_000) throw new Error('복사할 내용을 확인해 주세요.'); await clipboard.writeText(text); return true; });
+handle('memos:export', payload => exportMemo(payload, { memos, dialog, BrowserWindow, mainWindow }));
+handle('memos:link', async payload => {
+  const url = typeof payload === 'string' ? payload : payload?.url;
+  if (typeof url !== 'string' || url.length > 4000) throw new Error('주소를 확인해 주세요.');
+  if (url.startsWith('loxt-asset:')) { const asset = await memos.asset(url); const name = typeof payload?.name === 'string' ? payload.name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').trim().slice(0, 120) : ''; const result = await dialog.showSaveDialog(mainWindow, { title: '첨부파일 저장', defaultPath: name || asset.name }); if (!result.canceled && result.filePath) await require('node:fs/promises').copyFile(asset.filename, result.filePath); }
+  else if (/^https?:\/\//i.test(url) || /^mailto:/i.test(url)) await shell.openExternal(url);
+  else throw new Error('웹 주소 또는 이메일 링크만 열 수 있습니다.');
+});
 handle('live:state', () => live.snapshot());
 handle('system-audio:start', () => { if (!systemAudioAllowed) throw new Error('컴퓨터 소리 녹음 권한을 먼저 요청해 주세요.'); return systemAudio.start(); });
 handle('system-audio:cancel-pending', () => systemAudio.cancelPending());
@@ -262,11 +295,13 @@ handle('library:folder', payload => library.createFolder(payload));
 handle('library:rename-folder', payload => library.renameFolder(payload));
 handle('library:delete-folder', async folder => {
   const data = await library.list(), subtree = library.folderSubtree(folder);
+  if (data.notes.some(note => pendingMemoIds.has(note.id) && subtree.has(note.folder))) throw new Error('폴더 안의 메모 저장을 마친 뒤 삭제해 주세요.');
   if (conversions.snapshot().queue.some(job => data.notes.some(note => note.id === job.id && subtree.has(note.folder)))) throw new Error('이 폴더의 변환을 마치거나 취소한 뒤 삭제해 주세요.');
   return library.deleteFolder(folder);
 });
 handle('library:restore-trash', ids => library.restoreTrash(ids));
 handle('library:delete-trash', async ids => {
+  if (ids?.some(id => pendingMemoIds.has(id))) throw new Error('작성 중인 메모를 저장한 뒤 삭제해 주세요.');
   if (conversions.snapshot().queue.some(job => ids?.includes(job.id))) throw new Error('변환을 마치거나 취소한 뒤 삭제해 주세요.');
   return library.deleteTrash(ids);
 });
@@ -276,7 +311,7 @@ handle('transcript:copy', async id => {
   clipboard.writeText((await import('../shared/transcript.js')).serializeTranscript(note.segments));
   return true;
 });
-handle('library:update-note', payload => library.updateNote(payload?.id, payload?.changes || {}));
+handle('library:update-note', payload => { if (payload?.changes?.deleted && pendingMemoIds.has(payload.id)) throw new Error('메모 저장을 마친 뒤 휴지통으로 이동해 주세요.'); return library.updateNote(payload?.id, payload?.changes || {}); });
 handle('library:move-notes', payload => library.moveNotes(payload));
 handle('recording:discard', async id => {
   if (conversions.snapshot().queue.some(job => job.id === id)) throw new Error('변환 중인 녹음은 버릴 수 없습니다.');
@@ -358,6 +393,7 @@ app.whenReady().then(() => {
   nativeTheme.themeSource = appearance.theme;
   workspaceLibraries = new WorkspaceLibraries(app.getPath('userData'));
   library = workspaceLibraries.get('work');
+  memos = new Memos(library);
   // 실패는 library:list에서 화면에 안내합니다. 초기화 실패로 원본을 덮어쓰지 않습니다.
   library.ready.catch(() => {});
   transcriber = new Transcriber({ root: path.join(app.getPath('userData'), 'transcription'),
@@ -382,6 +418,10 @@ app.whenReady().then(() => {
   }, event => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('live:meter', event); });
   live.notifyPatch = patch => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('live:patch', patch); };
   protocol.handle('sorinote-audio', audioResponse);
+  protocol.handle('loxt-asset', async request => {
+    try { const asset = await memos.asset(request.url); return new Response(request.method === 'HEAD' ? null : Readable.toWeb(createReadStream(asset.filename)), { headers: { 'Content-Type': asset.mime, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Access-Control-Allow-Origin': developmentUrl || 'null' } }); }
+    catch { return new Response(null, { status: 404 }); }
+  });
   createWindow();
 });
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });

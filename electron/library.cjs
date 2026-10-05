@@ -8,8 +8,8 @@ const MIME = { '.webm': 'audio/webm', '.ogg': 'audio/ogg', '.mp3': 'audio/mpeg',
 function validNote(note) {
   return note && typeof note === 'object' && ID.test(note.id)
     && typeof note.title === 'string' && typeof note.folder === 'string'
-    && typeof note.audioFile === 'string' && path.basename(note.audioFile) === note.audioFile
-    && Boolean(MIME[path.extname(note.audioFile)]) && Array.isArray(note.segments);
+    && Array.isArray(note.segments) && (note.kind === 'memo' || (typeof note.audioFile === 'string' && path.basename(note.audioFile) === note.audioFile
+    && Boolean(MIME[path.extname(note.audioFile)])));
 }
 function recoverConversion(note) {
   if (note.done && note.diarization?.status === 'pending') return { ...note, status: 'partial', transcriptionError: '', diarization: { status: 'failed', error: '앱 종료로 화자 분석이 중단됐습니다. 화자 분석만 다시 시도할 수 있습니다.' } };
@@ -113,7 +113,7 @@ class Library {
       try { note = JSON.parse(await fs.readFile(path.join(directory, 'note.json'), 'utf8')); }
       catch { if (recovery) recovery.skipped++; continue; }
       if (!validNote(note) || note.id !== entry.name) { if (recovery) recovery.skipped++; continue; }
-      const audio = path.join(directory, note.audioFile);
+      const audio = path.join(directory, note.kind === 'memo' ? 'note.json' : note.audioFile);
       const partial = audio + '.part';
       if (!(await exists(audio)) && await exists(partial)) {
         const stat = await fs.stat(partial);
@@ -157,7 +157,7 @@ class Library {
     }
     if (recovery) {
       const available = [];
-      for (const note of this.data.notes) { if (await exists(path.join(this.recordings, note.id, note.audioFile))) available.push(recoverConversion(note)); else recovery.skipped++; }
+      for (const note of this.data.notes) { if (await exists(path.join(this.recordings, note.id, note.kind === 'memo' ? 'note.json' : note.audioFile))) available.push(recoverConversion(note)); else recovery.skipped++; }
       this.data.notes = available;
     }
     if (changed || !(await exists(this.index))) { this.validateIndex(this.data); await this.saveIndex(this.data, !recovery); }
@@ -482,14 +482,14 @@ class Library {
   setTranscription(id, changes) {
     return this.enqueue(async () => {
       const note = this.data.notes.find(n => n.id === id);
-      if (!note || (note.deleted && changes.status === 'transcribing') || note.status === 'recording') throw new Error('전사할 원본을 찾지 못했습니다.');
+      if (!note || note.kind === 'memo' || (note.deleted && changes.status === 'transcribing') || note.status === 'recording') throw new Error('전사할 원본을 찾지 못했습니다.');
       return this.saveNote({ ...note, ...changes });
     });
   }
   completeTranscription(id, result) {
     return this.enqueue(async () => {
       const note = this.data.notes.find(n => n.id === id);
-      if (!note || !Array.isArray(result.segments) || !Number.isFinite(result.seconds) || result.seconds < 0
+      if (!note || note.kind === 'memo' || !Array.isArray(result.segments) || !Number.isFinite(result.seconds) || result.seconds < 0
         || !result.segments.every(s => Number.isFinite(s.start) && Number.isFinite(s.end) && s.start >= 0 && s.end >= s.start && typeof s.text === 'string')) throw new Error('전사 결과 형식이 올바르지 않습니다.');
       if (result.segments.some(s => s.start >= result.seconds || s.end > result.seconds)) throw new Error('스크립트 시간이 원본 녹음 길이를 초과했습니다. 다시 변환해 주세요.');
       const directory = path.join(this.recordings, id);
@@ -508,9 +508,9 @@ class Library {
     await this.ready;
     if (!ID.test(id)) throw new Error('잘못된 녹음 ID입니다.');
     const note = this.data.notes.find(n => n.id === id);
-    if (!note || !MIME[path.extname(note.audioFile)] || path.basename(note.audioFile) !== note.audioFile) throw new Error('녹음을 찾지 못했습니다.');
+    if (!note || note.kind === 'memo' || !MIME[path.extname(note.audioFile)] || path.basename(note.audioFile) !== note.audioFile) throw new Error('녹음을 찾지 못했습니다.');
     return { filename: path.join(this.recordings, id, note.audioFile), mime: note.mime };
   }
 }
 
-module.exports = { Library };
+module.exports = { Library, atomicJson };

@@ -14,6 +14,14 @@ else {
 }
 
 contextBridge.exposeInMainWorld('desktop', Object.freeze({
+  memos: Object.freeze({
+    create: folder => ipcRenderer.invoke('memos:create', folder), get: id => ipcRenderer.invoke('memos:get', id),
+    save: payload => ipcRenderer.invoke('memos:save', payload), attach: payload => ipcRenderer.invoke('memos:attach', payload),
+    export: payload => ipcRenderer.invoke('memos:export', payload), openLink: url => ipcRenderer.invoke('memos:link', url),
+    copy: text => ipcRenderer.invoke('memos:copy', text),
+    pending: value => ipcRenderer.send('memos:pending', value),
+    onFlush: callback => { const listener = async (_event, token) => { try { await callback(); ipcRenderer.send('memos:flushed', { token }); } catch (error) { ipcRenderer.send('memos:flushed', { token, error: error.message }); } }; ipcRenderer.on('memos:flush', listener); return () => ipcRenderer.removeListener('memos:flush', listener); },
+  }),
   preferences: Object.freeze({
     get: () => ipcRenderer.invoke('preferences:get'), migrate: legacy => ipcRenderer.invoke('preferences:migrate', legacy),
     set: (mode, change) => ipcRenderer.invoke('preferences:set', { mode, change }),

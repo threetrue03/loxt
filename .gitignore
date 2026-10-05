@@ -5,3 +5,4 @@ test-results/
 *.log
 .runtime/
 __pycache__/
+landing/loxt-site-v*.zip

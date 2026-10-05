@@ -1,0 +1,4 @@
+use-composed-ref 1.4.0
+License: MIT
+Source: "git+https://github.com/Andarist/use-composed-ref.git"
+

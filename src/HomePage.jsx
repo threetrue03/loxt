@@ -1,12 +1,13 @@
 import Icon from './Icon.jsx';
+import Menu from './Menu.jsx';
 import { parentOf } from './FolderTree.jsx';
 
-export default function HomePage({ mode, loaded, busy, notes, folders, parents, recent, jobs, recording, onRecord, onImport, onLibrary, onRoot, onJob, renderNote, renderFolder }) {
+export default function HomePage({ mode, loaded, busy, notes, folders, parents, recent, jobs, recording, onRecord, onImport, onMemo, onFolder, onLibrary, onRoot, onJob, renderNote, renderFolder }) {
   const live = mode === 'live';
   const hasNotes = notes.some(note => !note.deleted);
   const roots = folders.filter(folder => parentOf(folder, parents) === '');
   return <section className="content home-page">
-    <header className="heading home-heading"><h1>홈</h1><span className="home-mode">{live ? 'Live' : 'Work'}</span></header>
+    <header className="heading home-heading"><h1>홈</h1><span className="home-mode">{live ? 'Live' : 'Work'}</span>{onMemo ? <div className="library-actions home-add-menu"><Menu label="새로 추가하기" trigger={<><Icon name="plus"/><span>새로 추가하기</span><Icon name="chevronDown"/></>} disabled={!loaded} className="add-menu">{close => <><button role="menuitem" onClick={() => { close(); onFolder(); }}><Icon name="folder"/>폴더</button><div className="action-menu-divider" role="separator"/><button role="menuitem" onClick={() => { close(); onRecord(); }}><Icon name="mic"/>새 녹음</button><button role="menuitem" onClick={() => { close(); onMemo(); }}><Icon name="file"/>새 메모</button><button role="menuitem" disabled={busy} onClick={() => { close(); onImport(); }}><Icon name="upload"/>불러오기</button></>}</Menu></div> : null}</header>
     <div className="home-start-actions">
       <button className="home-start-action" disabled={!loaded} onClick={onRecord}><Icon name="mic"/><span><strong>{live ? 'Live 시작' : '새 녹음 시작'}</strong><small>{live ? '말하는 동안 스크립트를 기록하세요.' : '녹음을 마치면 스크립트로 변환합니다.'}</small></span><Icon name="chevronRight"/></button>
       <button className="home-start-action" disabled={!loaded || busy} onClick={onImport}><Icon name="upload"/><span><strong>파일 불러오기</strong><small>음성 파일을 변환하세요.</small></span><Icon name="chevronRight"/></button>

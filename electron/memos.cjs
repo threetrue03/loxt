@@ -1,0 +1,110 @@
+const fs = require('node:fs/promises');
+const path = require('node:path');
+const { randomUUID } = require('node:crypto');
+const { atomicJson } = require('./library.cjs');
+const ID = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/;
+const types = new Set(['paragraph','heading','bulletListItem','numberedListItem','checkListItem','toggleListItem','quote','table','codeBlock','image','file','divider','mathBlock']);
+const imageTypes = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp' };
+function validateBlocks(blocks) {
+  if (!Array.isArray(blocks) || !blocks.length || Buffer.byteLength(JSON.stringify(blocks)) > 5_000_000) throw new Error('메모 본문이 비어 있거나 최대 크기(5 MB)를 초과했습니다.');
+  let count = 0;
+  function visit(list, depth) {
+    if (depth > 32 || !Array.isArray(list)) throw new Error('메모의 중첩 구조를 확인해 주세요.');
+    for (const block of list) {
+      if (++count > 10000 || !block || !types.has(block.type) || typeof block.id !== 'string' || block.id.length > 120) throw new Error('지원하지 않는 메모 블록입니다.');
+      if (block.children) visit(block.children, depth + 1);
+    }
+  }
+  visit(blocks, 0);
+  // No active schemes or external images/files may enter the persisted document.
+  function urls(value) {
+    if (!value || typeof value !== 'object') return;
+    for (const [key, item] of Object.entries(value)) {
+      if (key === 'href' && typeof item === 'string' && !/^(https?:|mailto:)/i.test(item)) throw new Error('웹 주소 또는 이메일 링크만 사용할 수 있습니다.');
+      if (key === 'url' && item && !/^loxt-asset:\/\/memo\/[a-f0-9-]{36}\/[a-f0-9-]{36}\.[a-z0-9]{1,12}$/.test(item)) throw new Error('이미지와 파일은 PC에서 첨부해 주세요.');
+      urls(item);
+    }
+  }
+  urls(blocks); return blocks;
+}
+function plainText(blocks) {
+  const parts = [];
+  function walk(value) {
+    if (!value || typeof value !== 'object') return;
+    if (typeof value.text === 'string') parts.push(value.text);
+    if (value.type === 'tableContent') for (const row of value.rows || []) walk(row);
+    else for (const [key, child] of Object.entries(value)) if (['content','children','cells'].includes(key) || Array.isArray(value)) walk(child);
+  }
+  walk(blocks); return parts.join(' ').slice(0, 2000);
+}
+class Memos {
+  constructor(library) { this.library = library; }
+  note(id, editable = false) {
+    if (!ID.test(id || '')) throw new Error('메모를 찾지 못했습니다.');
+    const note = this.library.data.notes.find(n => n.id === id);
+    if (!note || (editable && note.deleted)) throw new Error('메모가 삭제되었거나 존재하지 않습니다.');
+    return note;
+  }
+  directory(id) { return path.join(this.library.recordings, id); }
+  create(folder = '') {
+    return this.library.enqueue(async () => {
+      const now = new Date();
+      const note = { id: randomUUID(), kind: 'memo', title: '새 메모', folder: this.library.validateFolder(folder), date: `${now.getFullYear()}.${String(now.getMonth()+1).padStart(2,'0')}.${String(now.getDate()).padStart(2,'0')}`, createdAt: now.toISOString(), editedAt: now.toISOString(), segments: [], done: true, status: 'memo', deleted: false, memoPreview: '' };
+      await fs.mkdir(this.directory(note.id));
+      await atomicJson(path.join(this.directory(note.id), 'memo.json'), { version: 1, revision: 0, blocks: [{ id: randomUUID(), type: 'paragraph', props: {}, content: [], children: [] }] });
+      return { note, library: await this.library.saveNote(note) };
+    });
+  }
+  async read(id) {
+    await this.library.ready; this.note(id);
+    try {
+      const doc = JSON.parse(await fs.readFile(path.join(this.directory(id), 'memo.json'), 'utf8'));
+      if (doc.version !== 1 || !Number.isSafeInteger(doc.revision)) throw new Error('메모 형식이 올바르지 않습니다.');
+      validateBlocks(doc.blocks); return doc;
+    } catch (error) {
+      if (error.code === 'ENOENT' && this.note(id).kind !== 'memo') return { version: 1, revision: 0, blocks: [{ id: randomUUID(), type: 'paragraph', content: [], children: [] }] };
+      try {
+        const backup = JSON.parse(await fs.readFile(path.join(this.directory(id), 'memo.json.backup'), 'utf8'));
+        if (backup.version !== 1 || !Number.isSafeInteger(backup.revision)) throw new Error('잘못된 백업');
+        validateBlocks(backup.blocks);
+        return { ...backup, recovered: true };
+      } catch { /* Never replace an unreadable body with an empty document. */ }
+      throw new Error('메모를 읽지 못했습니다. 원본을 유지했습니다. ' + error.message);
+    }
+  }
+  save(payload) {
+    return this.library.enqueue(async () => {
+      const note = this.note(payload?.id, true), current = await this.read(note.id);
+      if (payload.revision !== current.revision) throw new Error('다른 화면에서 메모가 변경되었습니다. 다시 열어 내용을 확인해 주세요.');
+      const blocks = validateBlocks(payload.blocks);
+      const doc = { version: 1, revision: current.revision + 1, updatedAt: new Date().toISOString(), blocks };
+      if (current.recovered) await fs.copyFile(path.join(this.directory(note.id), 'memo.json'), path.join(this.directory(note.id), 'memo.json.damaged-' + Date.now())).catch(error => { if (error.code !== 'ENOENT') throw error; });
+      await atomicJson(path.join(this.directory(note.id), 'memo.json.backup'), { version: 1, revision: current.revision, updatedAt: current.updatedAt, blocks: current.blocks });
+      await atomicJson(path.join(this.directory(note.id), 'memo.json'), doc);
+      // A durable body save is authoritative even if the optional index preview fails.
+      try { await this.library.saveNote({ ...note, hasMemo: true, editedAt: doc.updatedAt, memoPreview: note.kind === 'memo' ? plainText(blocks) : note.memoPreview }); } catch { /* reopening reads the body directly */ }
+      return doc;
+    });
+  }
+  attach(payload) {
+    return this.library.enqueue(async () => {
+      this.note(payload?.id, true);
+      if (!(payload.bytes instanceof Uint8Array) || !payload.bytes.length || payload.bytes.length > 32 * 1024 * 1024 || typeof payload.name !== 'string') throw new Error('32 MB 이하의 파일을 첨부해 주세요.');
+      let ext = path.extname(payload.name).toLowerCase(); if (!/^\.[a-z0-9]{1,12}$/.test(ext)) ext = '.bin';
+      const filename = randomUUID() + ext, folder = path.join(this.directory(payload.id), 'attachments');
+      await fs.mkdir(folder, { recursive: true });
+      const file = await fs.open(path.join(folder, filename), 'wx');
+      try { await file.writeFile(payload.bytes); await file.sync(); } finally { await file.close(); }
+      return `loxt-asset://memo/${payload.id}/${filename}`;
+    });
+  }
+  async asset(url) {
+    const parsed = new URL(url), [id, filename, ...rest] = parsed.pathname.slice(1).split('/');
+    if (parsed.protocol !== 'loxt-asset:' || parsed.hostname !== 'memo' || rest.length || !ID.test(id || '') || !/^[a-f0-9-]{36}\.[a-z0-9]{1,12}$/.test(filename || '') || !ID.test(filename.slice(0,36))) throw new Error('첨부파일 경로가 올바르지 않습니다.');
+    await this.library.ready; this.note(id);
+    const location = path.join(this.directory(id), 'attachments', filename);
+    if (!(await fs.lstat(location)).isFile()) throw new Error('첨부파일을 찾지 못했습니다.');
+    return { filename: location, mime: imageTypes[path.extname(filename)] || 'application/octet-stream', id, name: filename };
+  }
+}
+module.exports = { Memos, validateBlocks, plainText };

@@ -1,0 +1,22 @@
+.memo-document{flex:1;min-height:240px;overflow:hidden;border:1px solid var(--theme-border-3b3b39);border-radius:12px;background:var(--theme-surface-script)}
+.memo-editor{height:100%;display:flex;flex-direction:column;min-height:0;color:var(--theme-text-main);background:var(--theme-surface-script);font-family:SUIT,sans-serif}
+.memo-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:12px 18px;border-bottom:1px solid var(--theme-border-subtle);flex-shrink:0}
+.memo-toolbar strong{font-weight:550;font-size:12px}.memo-save-status{font-size:11px;color:var(--theme-text-muted)}.memo-save-status.has-error{color:var(--theme-text-error)}
+.memo-tools{display:flex;align-items:center;gap:6px;margin-left:auto}.memo-tools>button,.memo-tools .menu-trigger{height:32px;min-height:32px;font-size:11px;padding:6px 9px}
+.memo-scroll{flex:1;overflow:auto;min-height:0;scrollbar-gutter:stable;overscroll-behavior:contain}.memo-scroll .bn-editor{padding:24px 38px 80px;min-height:100%;font-size:15px;line-height:1.8}.memo-editor-compact .bn-editor{padding:20px 30px 64px}
+.memo-editor .bn-container,.memo-editor .bn-editor,.memo-editor .bn-container button,.memo-editor .bn-container input,.memo-editor .bn-container textarea{font-family:SUIT,sans-serif}
+.memo-editor .bn-editor p{margin:0}.memo-editor .bn-editor h1{font-size:26px}.memo-editor .bn-editor h2{font-size:22px}.memo-editor .bn-editor h3{font-size:18px}
+.memo-editor .bn-editor blockquote{color:var(--theme-text-muted)}.memo-editor .bn-toggle-button{color:var(--theme-text-muted)}.memo-editor [data-content-type="codeBlock"]{font-family:Consolas,monospace}
+.memo-hint{padding:8px 18px;border-top:1px solid var(--theme-border-subtle);font-size:10px;color:var(--theme-text-muted);flex-shrink:0}
+.memo-loading{padding:26px;font-size:13px;color:var(--theme-text-muted)}.memo-loading button{margin:10px}.memo-error{flex-shrink:0}.memo-error button{margin-left:8px}
+.memo-search{display:flex;align-items:center;gap:8px;padding:8px 18px;border-bottom:1px solid var(--theme-border-subtle);font-size:11px}.memo-search input{flex:1;min-width:0;background:var(--theme-surface-control);border:1px solid var(--theme-border-subtle);border-radius:6px;color:var(--theme-text-main);padding:7px 9px}.memo-search button{padding:5px 8px;border-radius:5px}.memo-search button:hover{background:var(--theme-surface-hover)}
+::highlight(memo-search){background:#bca66080;color:inherit}.memo-save-notice{position:fixed;z-index:150;bottom:16px;left:50%;transform:translateX(-50%);max-width:calc(100vw - 40px);display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--theme-surface-control);border:1px solid var(--theme-border-subtle);border-radius:8px;font-size:12px}
+.detail-documents{display:grid;grid-template-columns:minmax(0,1fr) 0;flex:1;min-height:200px;overflow:hidden;transition:grid-template-columns .25s ease;position:relative}.detail-documents.memo-open{grid-template-columns:minmax(0,1fr) minmax(320px,40%);gap:12px}.detail-documents>.transcript-frame{min-width:0;height:100%}.memo-panel{min-width:0;overflow:hidden;border:1px solid var(--theme-border-3b3b39);border-radius:12px;opacity:0;transition:opacity .25s ease,transform .25s ease;transform:translateX(20px)}.memo-open .memo-panel{opacity:1;transform:translateX(0)}
+.memo-preview{white-space:pre-wrap;overflow-wrap:anywhere;color:var(--theme-text-control);font-size:13px;line-height:1.9;margin:0}
+@media(max-width:1150px){.detail-documents.memo-open{grid-template-columns:minmax(0,1fr)}.memo-panel{position:absolute;right:0;top:0;bottom:0;width:min(460px,100%);z-index:6;box-shadow:-12px 0 30px #0003}.memo-toolbar{padding:10px 12px}}
+@media(prefers-reduced-motion:reduce){.detail-documents,.memo-panel{transition:none}}
+
+.home-add-menu{margin-left:auto}
+.memo-editor .bn-toggle-button>svg{fill:currentColor;stroke:none}
+.detail-documents{grid-template-columns:minmax(0,1fr) minmax(0,0fr)}.detail-documents.memo-open{grid-template-columns:minmax(0,1fr) minmax(0,.6667fr)}.memo-panel{pointer-events:none}.memo-open .memo-panel{pointer-events:auto}
+@media(max-width:1150px){.detail-documents.memo-open{grid-template-columns:minmax(0,1fr)}}
