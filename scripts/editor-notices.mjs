@@ -5,7 +5,9 @@ const destination=path.resolve('build/editor-licenses'); await mkdir(destination
 const records=[];
 for(const [location, metadata] of Object.entries(lock.packages)) {
   if (!location.startsWith('node_modules/') || metadata.dev) continue;
-  const pkg=JSON.parse(await readFile(path.join(location,'package.json'),'utf8'));
+  let pkg;
+  try { pkg=JSON.parse(await readFile(path.join(location,'package.json'),'utf8')); }
+  catch(error) { if(error.code==='ENOENT' && metadata.optional) continue; throw error; }
   const files=(await readdir(location,{withFileTypes:true})).filter(entry=>entry.isFile()&&/^(licen[cs]e|copying|notice)(\.|-|$)/i.test(entry.name));
   const parts=[];
   for(const file of files) parts.push(`--- ${file.name} ---\n${await readFile(path.join(location,file.name),'utf8')}`);

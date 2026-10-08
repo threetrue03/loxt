@@ -1,5 +1,5 @@
 import { useSettings } from './SettingsProvider.jsx';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Modal from './Modal.jsx';
 import Select from './Select.jsx';
 import { parentOf } from './FolderTree.jsx';
@@ -16,7 +16,23 @@ export default function ConversionDialog({ folders, parents = {}, initialFolder 
   const [model, setModel] = useState(preferences[mode].model);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState('');
-  const models = environment?.models || [];
+  const [remoteEnvironment, setRemoteEnvironment] = useState(null);
+  useEffect(() => {
+    if (!window.desktop.remote) return;
+    let active = true;
+    window.desktop.getTranscriptionEnvironment().then(value => {
+      if (active) setRemoteEnvironment(value);
+    }).catch(failure => { if (active) setError(failure.message); });
+    return () => { active = false; };
+  }, []);
+  const models = (remoteEnvironment || environment)?.models || [];
+  useEffect(() => {
+    if (!window.desktop.remote || !models.length) return;
+    if (!models.some(item => item.id === model && item.downloaded)) {
+      const installed = models.find(item => item.downloaded && item.preset) || models.find(item => item.downloaded);
+      if (installed) setModel(installed.id);
+    }
+  }, [models, model]);
   const locked = environment?.busy && !environment?.queue?.length;
   const chosen = models.find(item => item.id === model);
   async function confirm() {
@@ -31,7 +47,8 @@ export default function ConversionDialog({ folders, parents = {}, initialFolder 
   }
   return <Modal title="변환하기" onClose={() => { if (!working) onClose(); }}>
     <div className="conversion-options"><h3>저장할 폴더</h3><div className="folder-choices" role="group" aria-label="저장할 폴더">{['', ...roots, ...(preserveLocation && initialFolder && !roots.includes(initialFolder) ? [initialFolder] : [])].map(value => <button key={value} className="secondary" aria-pressed={folder === value} disabled={working} onClick={() => setFolder(value)}>{value || '폴더 지정 안함'}</button>)}</div>
-    <div className="field-label">변환 모델</div><Select label="변환 모델" className="field-select" value={model} disabled={working || !environment || locked} onChange={setModel} options={models.filter(item => item.preset || item.downloaded || item.id === environment?.model).map(item => ({value:item.id,label:`${item.label}${!item.downloaded ? ' · 설치 필요' : ''}`,group:item.external ? '외부 모델' : '기본 모델'}))}/><p className="hint">{chosen?.description}{chosen && !chosen.downloaded ? ` · 다운로드 ${chosen.size}` : ''}</p>
-    {error ? <p className="error-message" role="alert">{error}</p> : null}<div className="conversion-actions">{onDiscard ? <button className="secondary danger" disabled={working} onClick={discard}><span>버리기</span></button> : null}<button className="primary" disabled={working || !environment || locked} onClick={confirm}>{working ? '처리 중…' : '변환하기'}</button></div></div>
+    <div className="field-label">변환 모델</div><Select label="변환 모델" className="field-select" value={model} disabled={working || !environment || locked} onChange={setModel} options={models.filter(item => (!window.desktop.remote || item.downloaded) && (item.preset || item.downloaded || item.id === environment?.model)).map(item => ({value:item.id,label:`${item.label}${!item.downloaded ? ' · 설치 필요' : ''}`,group:item.external ? '외부 모델' : '기본 모델'}))}/><p className="hint">{chosen?.description}{chosen && !chosen.downloaded ? ` · 다운로드 ${chosen.size}` : ''}</p>
+    {window.desktop.remote && remoteEnvironment && !models.some(item => item.downloaded) ? <p className="hint">연결한 PC에 설치된 모델이 없습니다. PC의 설정 → 모델 보관함에서 설치한 뒤 이 창을 다시 열어 주세요.</p> : null}
+    {error ? <p className="error-message" role="alert">{error}</p> : null}<div className="conversion-actions">{onDiscard ? <button className="secondary danger" disabled={working} onClick={discard}><span>버리기</span></button> : null}<button className="primary" disabled={working || !environment || locked || window.desktop.remote && !chosen?.downloaded} onClick={confirm}>{working ? '처리 중…' : '변환하기'}</button></div></div>
   </Modal>;
 }

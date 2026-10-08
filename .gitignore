@@ -6,3 +6,5 @@ test-results/
 .runtime/
 __pycache__/
 landing/loxt-site-v*.zip
+
+public/pdf-assets/

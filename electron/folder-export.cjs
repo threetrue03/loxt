@@ -94,7 +94,10 @@ async function exportFolder(payload, { library, dialog, mainWindow }) {
     for (const note of snapshot.notes) {
       const location = directory(note.folder) + safeName(note.title) + ' [' + note.id + ']/';
       zip.addEmptyDirectory(location);
-      if (note.kind !== 'memo') {
+      if (note.kind === 'pdf') {
+        zip.addFile(path.join(library.recordings,note.id,'original.pdf'),location + '원본.pdf');
+        zip.addFile(path.join(library.recordings,note.id,'annotations.json'),location + '필기.json');
+      } else if (note.kind !== 'memo') {
         if (typeof note.audioFile !== 'string' || path.basename(note.audioFile) !== note.audioFile) throw new Error('원본 녹음 경로를 확인해 주세요.');
         zip.addFile(path.join(library.recordings, note.id, note.audioFile), location + '원본' + path.extname(note.audioFile));
         if (note.done || note.segments?.length) zip.addBuffer(Buffer.from('\ufeff' + note.title + '\n\n' + (note.segments || []).map(segment => `[${time(segment.start)}] ${segment.speaker ? segment.speaker + ' · ' : ''}${segment.text}`).join('\n'), 'utf8'), location + '스크립트.txt');

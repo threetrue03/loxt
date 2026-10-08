@@ -1,9 +1,9 @@
 {
-  "version": "1.15.0",
+  "version": "2.0.0",
   "examples": true,
   "liveInference": false,
   "exampleAudio": "silent WAV and scripted transcript/speaker data; not accuracy or speed measurements",
-  "capturedAt": "2026-10-08T05:03:36.295Z",
+  "capturedAt": "2026-10-08T08:04:12.790Z",
   "images": [
     {
       "file": "sidebar-collapsed-work.png",
@@ -75,13 +75,13 @@
       "file": "conversion.png",
       "width": 1783,
       "height": 1079,
-      "scenario": "work-paused-conversion"
+      "scenario": "work-stopped-conversion"
     },
     {
       "file": "recording.png",
       "width": 1783,
       "height": 1079,
-      "scenario": "work-paused-recording"
+      "scenario": "work-stopped-recording"
     },
     {
       "file": "models.png",
@@ -142,6 +142,32 @@
       "width": 1783,
       "height": 1079,
       "scenario": "work-home-folder-panel"
+    },
+    {
+      "file": "pdf.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "pdf-reading-annotations"
+    },
+    {
+      "file": "light-pdf.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "pdf-reading-annotations-light"
+    },
+    {
+      "file": "device-settings.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "personal-device-connection"
+    },
+    {
+      "file": "mobile-pdf.png",
+      "width": 390,
+      "height": 844,
+      "scenario": "approved-mobile-pdf",
+      "workspace": "work",
+      "example": true
     },
     {
       "file": "live-home.png",

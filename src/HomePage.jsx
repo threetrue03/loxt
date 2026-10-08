@@ -9,9 +9,9 @@ export default function HomePage({ mode, loaded, busy, notes, folders, parents, 
   return <section className="content home-page">
     <header className="heading home-heading"><h1>홈</h1><span className="home-mode">{live ? 'Live' : 'Work'}</span></header>
     <div className="home-start-actions">
-      <button className="home-start-action" disabled={!loaded} onClick={onRecord}><Icon name="mic"/><span><strong>{live ? 'Live 시작' : '새 녹음 시작'}</strong><small>{live ? '말하는 동안 스크립트를 기록하세요.' : '녹음을 마치면 스크립트로 변환합니다.'}</small></span><Icon name="chevronRight"/></button>
-      <button className="home-start-action" disabled={!loaded || busy} onClick={onImport}><Icon name="upload"/><span><strong>파일 불러오기</strong><small>음성 파일을 변환하세요.</small></span><Icon name="chevronRight"/></button>
-      {!live ? <button className="home-start-action" disabled={!loaded || busy} onClick={onYouTube}><Icon name="youtube"/><span><strong>YouTube 불러오기</strong><small>링크의 음성을 변환하세요.</small></span><Icon name="chevronRight"/></button> : null}
+      {!live || !window.desktop.remote ? <button className="home-start-action" disabled={!loaded} onClick={onRecord}><Icon name="mic"/><span><strong>{live ? 'Live 시작' : '새 녹음 시작'}</strong><small>{live ? '말하는 동안 스크립트를 기록하세요.' : '녹음을 마치면 스크립트로 변환합니다.'}</small></span><Icon name="chevronRight"/></button> : null}
+      {!live || !window.desktop.remote ? <button className="home-start-action" disabled={!loaded || busy} onClick={onImport}><Icon name="upload"/><span><strong>파일 불러오기</strong><small>음성 파일을 변환하세요.</small></span><Icon name="chevronRight"/></button> : null}
+      {!live && !window.desktop.remote ? <button className="home-start-action" disabled={!loaded || busy} onClick={onYouTube}><Icon name="youtube"/><span><strong>YouTube 불러오기</strong><small>링크의 음성을 변환하세요.</small></span><Icon name="chevronRight"/></button> : null}
     </div>
     {recording || jobs.length ? <section className="home-section" aria-labelledby={`home-jobs-${mode}`}><div className="home-section-heading"><h2 id={`home-jobs-${mode}`}>진행 중</h2></div><div className="home-jobs">
       {recording ? <button className="home-recording-job" onClick={recording.onOpen}><Icon name="mic"/><span><strong>{recording.title}</strong><small>{recording.status}</small></span><span>돌아가기</span><Icon name="chevronRight"/></button> : null}

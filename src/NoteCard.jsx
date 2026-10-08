@@ -17,7 +17,7 @@ export default function NoteCard({ note, selected, onOpen, onMenu, editing, onRe
   }, []);
   const rendered = inView || editing;
   useLayoutEffect(() => { if (rendered && focusPending.current) { focusPending.current = false; root.current.querySelector('.note-open')?.focus(); } }, [rendered]);
-  const status = note.kind === 'memo' ? '메모' : note.status === 'queued' ? '대기 중' : note.status === 'transcribing' ? '변환 중' : note.status === 'failed' ? '변환 실패' : note.status === 'partial' ? '화자 분석 실패' : note.status === 'cancelled' ? '취소됨' : note.done ? '변환 완료' : '변환 대기';
+  const status = note.kind === 'pdf' ? 'PDF' : note.kind === 'memo' ? '메모' : note.status === 'queued' ? '대기 중' : note.status === 'transcribing' ? '변환 중' : note.status === 'failed' ? '변환 실패' : note.status === 'partial' ? '화자 분석 실패' : note.status === 'cancelled' ? '취소됨' : note.done ? '변환 완료' : '변환 대기';
   const tone = note.status === 'failed' ? 'failed' : ['queued', 'transcribing'].includes(note.status) ? 'working' : note.done ? 'done' : 'wait';
   const OpenTag = editing ? 'div' : 'button';
   return <article ref={root} tabIndex={rendered ? undefined : 0} aria-label={note.title} onFocus={event => { if (event.target === root.current) { focusPending.current = true; setInView(true); } }} data-note-id={note.id} className={`row note-card ${note.done ? 'transcribed' : 'untranscribed'} ${selected ? 'is-selected' : ''}`} onClick={event => { if (!editing && !event.target.closest('button,input,label,.note-preview,.inline-name')) onOpen(event); }} onContextMenu={event => onMenu(event, true)} onKeyDown={event => { if (event.target === root.current && ['Enter',' '].includes(event.key) && !editing) { event.preventDefault(); onOpen(event); } if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) onMenu(event, false); }}>
@@ -34,7 +34,7 @@ export default function NoteCard({ note, selected, onOpen, onMenu, editing, onRe
       {layout !== 'list' ? <ScriptPreview note={note} saved={previewState}/> : null}
     </div>
     <span className="cell date">{note.date}</span>
-    <span className="cell duration">{note.kind === 'memo' ? '—' : <><Icon name="clock"/>{note.duration}</>}</span>
+    <span className="cell duration">{note.kind === 'pdf' ? `${note.pages}쪽` : note.kind === 'memo' ? '—' : <><Icon name="clock"/>{note.duration}</>}</span>
     {layout === 'list' || (note.kind !== 'memo' && !note.done) || ['failed','partial','queued','transcribing'].includes(note.status) ? <span className={`status ${tone}`}>{status}</span> : null}
     <button className="more" aria-label={`${note.title} 관리`} aria-haspopup="menu" onClick={event => onMenu(event, false)}><Icon name="more"/></button>
     </> : null}
@@ -52,6 +52,6 @@ function ScriptPreview({ note, saved }) {
   useEffect(() => { saved.current.limit = limit; }, [limit]);
   const segments = note.segments || [];
   return <div ref={region} className="note-preview" role="region" aria-label={`${note.title} ${note.kind === 'memo' ? '메모' : '스크립트'} 미리보기`} tabIndex={note.kind === 'memo' || segments.length ? 0 : undefined} onFocus={() => setLimit(value => Math.max(value, 8))} onScroll={event => { const element = event.currentTarget; saved.current.top = element.scrollTop; if (element.scrollHeight - element.scrollTop - element.clientHeight < 60) setLimit(value => Math.min(segments.length, value + 12)); }}>
-    {note.kind === 'memo' ? <p className="memo-preview">{note.memoPreview || '메모를 열어 내용을 작성하세요.'}</p> : !['queued','transcribing'].includes(note.status) && segments.length ? <>{segments.slice(0, limit).map((segment, i) => <div className="preview-segment" key={i}><span>{formatTime(segment.start)}</span><p>{segment.text}</p></div>)}{limit < segments.length ? <button className="preview-more secondary" onClick={() => setLimit(value => Math.min(segments.length, value + 12))}>스크립트 더 보기</button> : null}</> : <div className="preview-empty"><Icon name="mic"/><strong>{note.done ? '인식된 음성이 없습니다' : '음성을 기록했습니다'}</strong><p>{note.done ? '원본 녹음을 재생해 확인하세요.' : '변환하면 이곳에 내용이 표시됩니다.'}</p></div>}
+    {note.kind === 'pdf' ? <p className="memo-preview">{note.pdfPreview || `PDF · ${note.pages}쪽`}</p> : note.kind === 'memo' ? <p className="memo-preview">{note.memoPreview || '메모를 열어 내용을 작성하세요.'}</p> : !['queued','transcribing'].includes(note.status) && segments.length ? <>{segments.slice(0, limit).map((segment, i) => <div className="preview-segment" key={i}><span>{formatTime(segment.start)}</span><p>{segment.text}</p></div>)}{limit < segments.length ? <button className="preview-more secondary" onClick={() => setLimit(value => Math.min(segments.length, value + 12))}>스크립트 더 보기</button> : null}</> : <div className="preview-empty"><Icon name="mic"/><strong>{note.done ? '인식된 음성이 없습니다' : '음성을 기록했습니다'}</strong><p>{note.done ? '원본 녹음을 재생해 확인하세요.' : '변환하면 이곳에 내용이 표시됩니다.'}</p></div>}
   </div>;
 }

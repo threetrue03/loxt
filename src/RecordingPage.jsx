@@ -10,6 +10,7 @@ import { formatRecordingTime } from './data.js';
 import { openLiveInput } from './liveCapture.js';
 
 function microphoneError(error) {
+  if (error.name === 'NotAllowedError' && window.desktop.remote) return 'Safari에서 이 사이트의 마이크 사용을 허용해 주세요. 신뢰한 HTTPS 주소로 연결했는지도 확인해 주세요.';
   if (error.name === 'NotAllowedError') return '마이크 사용 권한이 없습니다. Windows 마이크 개인정보 설정과 앱 권한을 확인해 주세요.';
   if (error.name === 'NotFoundError') return '연결된 마이크가 없습니다. 마이크를 연결한 뒤 다시 시작해 주세요.';
   if (error.name === 'NotReadableError') return '마이크를 열지 못했습니다. 다른 앱의 마이크 사용과 장치 상태를 확인해 주세요.';
@@ -100,6 +101,13 @@ export default function RecordingPage({ workspaceActive = true, folderParents, f
     return () => clearInterval(timer);
   }, [state]);
 
+  useEffect(() => {
+    if (!window.desktop.remote) return;
+    const hidden = () => { if (document.hidden && ['recording','paused'].includes(status.current)) stop('화면이 비활성화되어 녹음을 종료했습니다. 모바일에서는 화면을 열어 둔 상태로 녹음해 주세요.'); };
+    document.addEventListener('visibilitychange', hidden);
+    return () => document.removeEventListener('visibilitychange', hidden);
+  }, []);
+
   function flushChunks() {
     if (pump.current) return pump.current;
     const work = (async () => {
@@ -126,7 +134,7 @@ export default function RecordingPage({ workspaceActive = true, folderParents, f
       setStored(result); changeState('stopped');
       await callbacks.current.onFinish(result, { review: true });
       if (finalizing.current) { finalizing.current.resolve(result); finalizing.current = null; }
-      else setReview(true);
+      else setConversionReady(true);
       if (stopReason.current) callbacks.current.onNotice(stopReason.current);
     } catch (failure) {
       changeState('save-error');
@@ -146,7 +154,7 @@ export default function RecordingPage({ workspaceActive = true, folderParents, f
     if (!window.desktop) { setError('데스크톱 앱에서 녹음할 수 있습니다.'); return; }
     changeState('starting'); setError(''); setConversionReady(false); callbacks.current.onBusy(true);
     try {
-      const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'].find(type => MediaRecorder.isTypeSupported(type));
+      const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'].find(type => MediaRecorder.isTypeSupported(type));
       if (!mime) throw new Error('녹음 형식을 지원하지 않습니다.');
       setOutputStatus('');
       stream.current = await openLiveInput(device, event => {
@@ -192,12 +200,8 @@ export default function RecordingPage({ workspaceActive = true, folderParents, f
     }
   }
   function stopForReview() {
-    if (status.current === 'recording' || (status.current === 'paused' && !conversionReady)) {
-      if (status.current === 'recording') pause();
-      setConversionReady(true);
-      return;
-    }
-    if (status.current === 'paused' || status.current === 'stopped') setReview(true);
+    if (['recording', 'paused'].includes(status.current)) { setConversionReady(true); stop(); return; }
+    if (status.current === 'stopped') setReview(true);
   }
   async function convert(options) {
     const result = stored || await new Promise((resolve, reject) => {
@@ -244,18 +248,18 @@ export default function RecordingPage({ workspaceActive = true, folderParents, f
     {error ? <p className="error-message" role="alert">{error}</p> : null}
     <ResizableDocuments open={memoOpen}><div className="transcript-frame"><div className="detail-tabs"><span>스크립트</span><div className="script-actions"><button className="script-export" aria-label="메모 열기" aria-expanded={memoOpen} disabled={!memoId || state === 'discarding'} onClick={() => setMemoOpen(value => !value)}><Icon name="file"/>메모</button></div></div><div className="transcript" role="region" aria-label="스크립트" tabIndex="0"><div className="empty">{stored ? '저장할 폴더와 모델을 선택하면 변환을 시작합니다.' : '녹음을 중단한 뒤 변환하기를 눌러 음성을 스크립트로 변환합니다.'}</div></div></div><aside className="memo-panel" aria-label="녹음 메모" inert={!memoOpen || undefined}>{memoId ? <MemoHost id={memoId} title={title + ' 메모'} compact onClose={() => setMemoOpen(false)}/> : null}</aside></ResizableDocuments>
     <div className="bottom-controls">
-    <div className={`recording ${state === 'recording' ? 'is-recording' : state === 'paused' ? 'is-paused' : ''}`}>
+    <div className={`recording ${state === 'recording' ? 'is-recording' : state === 'paused' ? 'is-paused' : state === 'stopped' ? 'is-stopped' : ''}`}>
       {state !== 'ready' ? <div className="record-state" role="status">{statusText}</div> : null}
       <div className="wave" aria-hidden="true">{Array.from({ length: 12 }, (_, i) => <i key={i} style={{ height: 4 + level * (20 + Math.sin(i * 1.3) * 10) }}/>)}</div>
       <span className="record-device" title={device === '__system__' ? outputStatus || '컴퓨터 소리' : device ? devices.find(item => item.deviceId === device) ? devices.find(item => item.deviceId === device).label || '선택한 마이크' : '선택 장치 · 연결되지 않음' : '시스템 기본 마이크'}>{device === '__system__' ? outputStatus || '컴퓨터 소리' : device ? devices.find(item => item.deviceId === device) ? devices.find(item => item.deviceId === device).label || '선택한 마이크' : '선택 장치 · 연결되지 않음' : '시스템 기본 마이크'}</span><div className="clock">{formatRecordingTime(seconds)}</div>
       <div className="record-actions">
         {state === 'save-error' ? <><button className="secondary" onClick={keepPartial}>저장된 부분 보관</button><button className="primary" onClick={save}>저장 재시도</button></> : <>
-          <button className="secondary" disabled={!['recording', 'paused'].includes(state)} onClick={pause}><Icon name={state === 'paused' ? 'play' : 'pause'}/><span>{state === 'paused' ? '녹음 계속' : '일시정지'}</span></button>
-          <div className="record-start-group"><button className="primary" disabled={['starting', 'saving', 'discarding'].includes(state) || !window.desktop} onClick={state === 'ready' ? start : stopForReview}>{state === 'ready' ? <><Icon name="mic"/>녹음 시작</> : state === 'saving' ? '저장 중…' : state === 'starting' ? '연결 중…' : state === 'stopped' || conversionReady ? '변환하기' : <><Icon name="stop"/>녹음 중단</>}</button><Menu label="녹음 장치 선택" trigger={<Icon name="chevronDown"/>} className="microphone-menu" upward disabled={active || Boolean(stored)}>{close => [{ deviceId: '', label: '시스템 기본 마이크' }, { deviceId: '__system__', label: '컴퓨터 소리' }, ...devices].map((item, index) => <button role="menuitemradio" aria-checked={device === item.deviceId} key={item.deviceId} onClick={() => { setDevice(item.deviceId); close(); }}><Icon name={item.deviceId === '__system__' ? 'speaker' : 'mic'}/><span>{item.label || `마이크 ${index}`}</span>{device === item.deviceId ? <span>✓</span> : null}</button>)}</Menu></div>
+          {state === 'stopped' ? <button className="secondary danger" onClick={() => discard().catch(error => setError(error.message))}>버리기</button> : <button className="secondary" disabled={!['recording', 'paused'].includes(state)} onClick={pause}><Icon name={state === 'paused' ? 'play' : 'pause'}/><span>{state === 'paused' ? '녹음 계속' : '일시정지'}</span></button>}
+          <div className={`record-start-group ${state === 'stopped' ? 'conversion-button-group' : ''}`}><button className="primary" disabled={['starting', 'saving', 'discarding'].includes(state) || !window.desktop} onClick={state === 'ready' ? start : stopForReview}>{state === 'ready' ? <><Icon name="mic"/>녹음 시작</> : state === 'saving' ? '저장 중…' : state === 'starting' ? '연결 중…' : state === 'stopped' || conversionReady ? '변환하기' : <><Icon name="stop"/>녹음 중단</>}</button>{state !== 'stopped' && <Menu label="녹음 장치 선택" trigger={<Icon name="chevronDown"/>} className="microphone-menu" upward disabled={active || Boolean(stored)}>{close => [{ deviceId: '', label: '시스템 기본 마이크' }, ...(!window.desktop.remote ? [{ deviceId: '__system__', label: '컴퓨터 소리' }] : []), ...devices].map((item, index) => <button role="menuitemradio" aria-checked={device === item.deviceId} key={item.deviceId} onClick={() => { setDevice(item.deviceId); close(); }}><Icon name={item.deviceId === '__system__' ? 'speaker' : 'mic'}/><span>{item.label || `마이크 ${index}`}</span>{device === item.deviceId ? <span>✓</span> : null}</button>)}</Menu>}</div>
         </>}
       </div>
     </div>
     </div>
-    {review ? <ConversionDialog folders={folders} parents={folderParents} initialFolder={folder} environment={environment} onClose={() => setReview(false)} onConfirm={convert} onDiscard={discard}/> : null}
+    {review ? <ConversionDialog folders={folders} parents={folderParents} initialFolder={folder} environment={environment} onClose={() => setReview(false)} onConfirm={convert}/> : null}
   </section>;
 }

@@ -1,0 +1,22 @@
+/* Shared desktop/web fixes use the established LOXT theme tokens. */
+.recording.is-recording .record-start-group>.primary:hover,.recording.is-paused .record-start-group>.primary:hover{background:transparent!important;filter:brightness(.94)}
+.record-start-group:focus-within{outline:2px solid var(--blue);outline-offset:3px}
+.record-start-group>.primary:focus-visible{outline-offset:-3px;border-radius:7px}
+.record-start-group.conversion-button-group>.primary{border-radius:7px;width:100%}
+.script-actions .script-export-menu .menu-trigger{font-size:11px;padding:4px 8px;min-height:26px;height:auto;gap:5px}
+.script-actions .script-export-menu svg{width:14px;height:14px}
+.overlay{z-index:300}
+.overlay .menu-popover{z-index:310}
+.library-view .library-actions{min-width:0;max-width:100%;flex-wrap:wrap;justify-content:flex-start}
+.library-view .library-heading{min-width:0;align-items:flex-start}
+.workspace-heading .workspace-title{max-width:100%;flex:0 1 auto;overflow:hidden}
+.workspace-title input{max-width:100%;min-width:0;box-sizing:border-box}
+.memo-tools{min-width:0;max-width:100%;flex-wrap:wrap}
+@container (max-width:640px){.library-view .library-actions{width:100%}.settings-panel .model-row{grid-template-columns:minmax(0,1fr)}.settings-panel .model-row .model-actions{justify-content:flex-start}.workspace-heading{flex-wrap:wrap}.workspace-heading .workspace-title{max-width:100%}.model-title,.model-name{word-break:normal;overflow-wrap:anywhere}}
+@container (max-width:450px){.library-search{min-width:0;width:100%;max-width:100%}.settings-nav{width:auto;display:flex;flex-wrap:wrap}.settings-nav button{width:auto}.recording .record-actions{flex-wrap:wrap}}
+
+.device-settings img{display:block;border-radius:8px;margin:16px 0}.device-settings code,.device-settings .hint{overflow-wrap:anywhere}.device-settings details{margin:20px 0}.device-settings ol{padding-left:20px;line-height:1.8}
+
+.recording.is-recording .record-start-group .menu-trigger:hover,.recording.is-paused .record-start-group .menu-trigger:hover{background:transparent!important;filter:brightness(.94)}
+@container(max-width:440px){.settings-panel .model-row{grid-template-columns:minmax(0,1fr)!important}.settings-panel .model-row-actions{grid-column:1!important;grid-row:auto!important;justify-content:flex-start}.settings-panel .model-description{grid-row:auto!important}.settings-panel .model-name{min-width:0;overflow-wrap:normal;word-break:keep-all;flex-wrap:wrap}}
+@container(max-width:450px){.workspace-main .app.settings-view{--sidebar-width:64px}.workspace-main .settings-sidebar-title,.workspace-main .settings-nav span,.workspace-main .settings-return span{display:none}.workspace-main .settings-nav button{justify-content:center}.workspace-main .settings-panel{padding:16px 12px}.settings-row{min-width:0}.device-settings .settings-row{display:flex;flex-wrap:wrap}}

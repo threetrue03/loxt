@@ -1,3 +1,4 @@
+import DeviceSettings from './DeviceSettings.jsx';
 import { useEffect, useRef, useState } from 'react';
 import Select from './Select.jsx';
 import Icon from './Icon.jsx';
@@ -70,6 +71,7 @@ export default function SettingsPage({ mode = 'work' }) {
   const missingDevice = ready && !inputs.loading && !inputs.error && defaults.microphone && defaults.microphone !== '__system__' && !inputs.devices.some(device => device.deviceId === defaults.microphone);
   const errors = Object.entries(issues).filter(([key]) => key === 'load' || key.startsWith(mode + ':'));
   return <section className="content settings-page settings-panel"><div className="heading"><h1>{title}</h1></div>
+    {tab === 'devices' ? <DeviceSettings/> : null}
     <p className="settings-scope">{tab === 'general' ? `테마는 앱 전체에, 보관함 보기는 ${labelMode(mode)}에 적용됩니다.` : tab === 'recording' ? `${labelMode(mode)} 새 녹음에 적용됩니다. 진행 중인 녹음은 유지됩니다.` : tab === 'models' ? `설치된 모델은 함께 사용합니다. 기본 모델 선택은 ${labelMode(mode)}에 적용됩니다.` : '앱 공통'}</p>
     {!ready ? <p className="hint" role="status">설정을 확인하는 중…</p> : null}
     {errors.map(([key, error]) => <p key={key} className="error-message" role="alert">{error.text} <button className="secondary" disabled={pending[key]} onClick={() => error.change ? change(error.mode, error.change) : reload()}>다시 시도</button></p>)}

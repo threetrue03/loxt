@@ -37,3 +37,5 @@
 .footer-links a{margin-left:0;white-space:nowrap}
 @media(max-width:800px){.themes{padding-block:64px}}
 @media(max-width:540px){.themes .section-heading{text-align:left}.theme-switch{justify-content:flex-start}.footer-links{gap:16px}}
+
+.mobile-app-preview{max-width:320px;margin-inline:auto}

@@ -11,7 +11,7 @@ import './memo.css';
 import Icon from './Icon.jsx';
 import Menu from './Menu.jsx';
 import { useTheme } from './ThemeProvider.jsx';
-import { memoEntry, loadMemo, changeMemo, saveMemo } from './memoStore.js';
+import { memoEntry, loadMemo, changeMemo, saveMemo, latestMemo, downloadMemoDraft } from './memoStore.js';
 
 const { audio: _audio, video: _video, ...specs } = defaultBlockSpecs;
 const schema = BlockNoteSchema.create({ blockSpecs: specs }).extend({ blockSpecs: { heading: createHeadingBlockSpec({levels:[1,2,3],allowToggleHeadings:false}), image: ReactImageBlock(), file: ReactFileBlock(), codeBlock: createCodeBlockSpec(codeBlockOptions), mathBlock: createReactMathBlockSpec() }, inlineContentSpecs: { math: createReactInlineMathSpec() } });
@@ -52,11 +52,18 @@ export default function MemoEditor({ id, title, compact = false, readOnly = fals
 function Editor({ id, title, initial, state, compact, readOnly, onClose }) {
   const { theme } = useTheme(), root = useRef(null), searchInput = useRef(null), copyTimer = useRef(null);
   const [searchOpen, setSearchOpen] = useState(false), [query, setQuery] = useState(''), [matches, setMatches] = useState([]), [matchIndex, setMatchIndex] = useState(0), [error, setError] = useState(''), [exporting, setExporting] = useState(false), [copied, setCopied] = useState(false);
-  const editor = useCreateBlockNote({ schema, dictionary, initialContent: initial, extensions: [syntaxHighlighter], uploadFile: async file => {
+  const editor = useCreateBlockNote({ schema, dictionary, initialContent: initial, resolveFileUrl: window.desktop.assetUrl || (async url => url), extensions: [syntaxHighlighter], uploadFile: async file => {
     try { if (file.size > 32 * 1024 * 1024) throw new Error('32 MB 이하의 파일을 첨부해 주세요.'); return await window.desktop.memos.attach({ id, name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) }); }
     catch (failure) { setError(failure.message); throw failure; }
   } }, [id]);
-  useEffect(() => editor.onChange(() => changeMemo(id, editor.document)), [editor, id]);
+  const applying = useRef(false);
+  useEffect(() => editor.onChange(() => { if (!applying.current) changeMemo(id, editor.document); }), [editor, id]);
+  useEffect(() => {
+    if (state.blocks && JSON.stringify(editor.document) !== JSON.stringify(state.blocks)) {
+      applying.current = true;
+      try { editor.replaceBlocks(editor.document, state.blocks); } finally { applying.current = false; }
+    }
+  }, [editor, state.blocks]);
   useEffect(() => () => { void saveMemo(id).catch(() => {}); }, [id]);
   useEffect(() => () => clearTimeout(copyTimer.current), []);
   useEffect(() => {
@@ -87,7 +94,7 @@ function Editor({ id, title, initial, state, compact, readOnly, onClose }) {
   }}>
     <div className="memo-toolbar"><strong>{compact ? '메모' : '문서'}</strong><span className={`memo-save-status ${state.error ? 'has-error' : ''}`} role="status">{state.error ? '저장 실패' : state.saving || state.dirty ? '저장 중…' : '저장됨'}</span><div className="memo-tools"><button className="script-export" aria-label="메모에서 찾기" aria-pressed={searchOpen} onClick={() => setSearchOpen(value => !value)}><Icon name="search"/></button><Menu disabled={readOnly} label="편집 도구" trigger={<Icon name="more"/>}>{close => <><button role="menuitem" onClick={() => { close(); editor.undo(); }}>실행 취소</button><button role="menuitem" onClick={() => { close(); editor.redo(); }}>다시 실행</button><button role="menuitem" onClick={() => { close(); copyCode(); }}>{copied ? '복사됨' : '코드 복사'}</button></>}</Menu><Menu label="메모 내보내기" disabled={exporting} trigger={<><Icon name="download"/><span>내보내기</span><Icon name="chevronDown"/></>}>{close => ['md','html','pdf'].map(format => <button role="menuitem" key={format} onClick={() => { close(); exportDocument(format); }}>{format === 'md' ? 'Markdown (.md)' : format.toUpperCase()}</button>)}</Menu>{onClose ? <button className="script-export" aria-label="메모 닫기" onClick={onClose}><Icon name="close"/></button> : null}</div></div>
     {searchOpen ? <div className="memo-search"><input ref={searchInput} aria-label="메모 검색어" placeholder="메모에서 찾기" value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') find(matchIndex + (event.shiftKey ? -1 : 1)); }}/><span aria-live="polite">{matches.length ? `${matchIndex + 1} / ${matches.length}` : '0개'}</span><button aria-label="이전 검색 결과" disabled={!matches.length} onClick={() => find(matchIndex - 1)}>↑</button><button aria-label="다음 검색 결과" disabled={!matches.length} onClick={() => find(matchIndex + 1)}>↓</button></div> : null}
-    {state.error || error ? <div className="error-message memo-error" role="alert">{state.error || error}{state.error ? <button className="secondary" onClick={() => saveMemo(id).catch(() => {})}>다시 시도</button> : <button className="secondary" onClick={() => setError('')}>닫기</button>}</div> : null}
+    {state.error || error ? <div className="error-message memo-error" role="alert">{state.error || error}{state.error ? <><button className="secondary" onClick={() => saveMemo(id).catch(() => {})}>다시 시도</button><button className="secondary" onClick={() => downloadMemoDraft(id)}>내 초안 백업</button><button className="secondary" onClick={() => latestMemo(id).catch(failure => setError(failure.message))}>최신 내용 보기</button></> : <button className="secondary" onClick={() => setError('')}>닫기</button>}</div> : null}
     {state.recovered ? <p className="recovery-message memo-error">메모 백업을 표시하고 있습니다. 마지막 수정 일부는 포함되지 않을 수 있습니다. 편집해 저장하면 손상된 원본을 별도 보관합니다.</p> : null}
     <div className="memo-scroll"><MemoErrorContext.Provider value={setError}><BlockNoteContext.Provider value={{ editor, colorSchemePreference: theme }}><BlockNoteView editable={!readOnly} editor={editor} theme={editorTheme} data-loxt-theme={theme} slashMenu={false} formattingToolbar={false} linkToolbar={false} sideMenu={false} filePanel={false}>
       <FormattingToolbarController formattingToolbar={MemoFormattingToolbar}/>

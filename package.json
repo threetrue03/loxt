@@ -1,6 +1,6 @@
 {
   "name": "sorinote-desktop",
-  "version": "1.15.0",
+  "version": "2.0.0",
   "private": true,
   "description": "LOXT 로컬 전사 데스크톱 앱",
   "author": "LOXT",
@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "dev:web": "vite --host 127.0.0.1",
-    "build": "vite build",
+    "build": "node scripts/pdf-assets.mjs && vite build",
     "start": "npm run build && node scripts/start.mjs",
     "test": "npm run build && node scripts/smoke.mjs",
     "test:ui": "npm run build && node scripts/ui-design-smoke.mjs",
@@ -18,7 +18,7 @@
     "assets": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-icon.ps1",
     "package": "npm run bundle:python && npm run bundle:youtube && npm run assets && node scripts/editor-notices.mjs && npm run build && electron-builder --dir --win --x64",
     "package:installer": "npm run bundle:python && npm run bundle:youtube && npm run assets && node scripts/editor-notices.mjs && npm run build && node scripts/package-installer.cjs && node scripts/release-manifest.mjs",
-    "test:release": "node --test scripts/release.test.cjs scripts/automatic-transcription.test.cjs scripts/external-models.test.cjs scripts/conversion-queue.test.cjs scripts/nested-folders.test.cjs scripts/trash.test.cjs scripts/library-interactions.test.cjs scripts/workspace-libraries.test.cjs scripts/transcript-timestamps.test.cjs scripts/live.test.cjs scripts/youtube.test.cjs scripts/appearance.test.cjs scripts/improvements.test.cjs scripts/settings.test.cjs scripts/memos.test.cjs scripts/panel.test.cjs scripts/folder-export.test.cjs",
+    "test:release": "node --test scripts/release.test.cjs scripts/automatic-transcription.test.cjs scripts/external-models.test.cjs scripts/conversion-queue.test.cjs scripts/nested-folders.test.cjs scripts/trash.test.cjs scripts/library-interactions.test.cjs scripts/workspace-libraries.test.cjs scripts/transcript-timestamps.test.cjs scripts/live.test.cjs scripts/youtube.test.cjs scripts/appearance.test.cjs scripts/improvements.test.cjs scripts/settings.test.cjs scripts/memos.test.cjs scripts/panel.test.cjs scripts/folder-export.test.cjs scripts/v2-services.test.cjs",
     "test:worker-pool": "node --test scripts/work-worker.test.cjs",
     "test:live": "npm run build && node scripts/live-smoke.mjs",
     "bundle:youtube": "node scripts/bundle-youtube.mjs",
@@ -26,7 +26,8 @@
     "test:settings": "npm run build && node scripts/settings-ui-smoke.mjs",
     "test:theme": "npm run build && node scripts/theme-smoke.mjs",
     "test:memos": "npm run build && node scripts/memo-ui-smoke.mjs",
-    "test:panels": "npm run build && node scripts/panel-ui-smoke.mjs"
+    "test:panels": "npm run build && node scripts/panel-ui-smoke.mjs",
+    "test:v2": "npm run build && node scripts/v2-ui-smoke.mjs"
   },
   "dependencies": {
     "@blocknote/code-block": "0.55.0",
@@ -36,6 +37,11 @@
     "@blocknote/react": "0.55.0",
     "@mantine/core": "8.3.11",
     "@mantine/hooks": "8.3.11",
+    "@pdf-lib/fontkit": "^1.1.1",
+    "node-forge": "^1.4.0",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^6.4.299",
+    "qrcode": "^1.5.4",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "sanitize-html": "2.18.0",

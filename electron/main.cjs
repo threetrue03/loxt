@@ -18,7 +18,7 @@ const { ModelActions } = require('./model-actions.cjs');
 const { LibraryLocation } = require('./library-location.cjs');
 const { LibraryActions } = require('./library-actions.cjs');
 const { BrowserTabs } = require('./browser-tabs.cjs');
-let libraryLocation, libraryActions, browserTabs, relocating = false;
+let libraryLocation, libraryActions, browserTabs, deviceServer, relocating = false;
 
 nativeTheme.themeSource = 'dark';
 // Keep the existing library and models through the LOXT display-name migration.
@@ -181,6 +181,11 @@ function publishSettings() {
   lastSettingsNotice = text;
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('settings:changed', state);
 }
+handle('devices:state', () => deviceServer?.snapshot() || {enabled:false,running:false});
+handle('devices:configure', enabled => deviceServer.configure(enabled));
+handle('devices:qr', () => deviceServer.newQR());
+handle('devices:approve', payload => deviceServer.approve(payload.id,payload.allow));
+handle('devices:revoke', id => deviceServer.revoke(id));
 handle('preferences:get', () => preferences.snapshot());
 handle('preferences:migrate', legacy => preferences.migrate(legacy));
 handle('preferences:set', async payload => {
@@ -253,7 +258,7 @@ handle('library:search', async payload => {
   for (const note of data.notes.filter(n => !n.deleted && n.folder === (payload.folder || ''))) {
     if (payload.field !== 'content' && note.title.toLocaleLowerCase('ko').includes(q)) { matches.push(note.id); continue; }
     if (payload.field !== 'title') {
-      let text = note.segments.map(s => s.text).join(' ');
+      let text = note.segments.map(s => s.text).join(' ') + ' ' + (note.kind==='pdf' ? await pdfFor(payload.workspace).text(note.id) : '');
       if (note.kind === 'memo' || note.hasMemo) {
         const doc = await new Memos(store).read(note.id); const parts = []; const walk = value => { if (typeof value?.text === 'string') parts.push(value.text); if (value && typeof value === 'object') Object.values(value).forEach(v => { if (v && typeof v === 'object') walk(v); }); }; walk(doc.blocks); text += ' ' + parts.join(' ');
       }
@@ -264,7 +269,7 @@ handle('library:search', async payload => {
 });
 handle('settings:library-root', () => ({ root: libraryLocation.root, changing: relocating }));
 handle('settings:move-library', async () => {
-  requireNoConversions(); if (pendingMemoIds.size || library.sessions.size || workspaceLibraries.live.sessions.size || youtube?.hasJobs) throw new Error('녹음·메모 저장·변환을 마친 뒤 저장 위치를 변경해 주세요.');
+  requireNoConversions(); if(deviceServer?.running)throw new Error('내 기기 연결을 끈 뒤 저장 위치를 변경해 주세요.'); if (pendingMemoIds.size || library.sessions.size || workspaceLibraries.live.sessions.size || youtube?.hasJobs) throw new Error('녹음·메모 저장·변환을 마친 뒤 저장 위치를 변경해 주세요.');
   const chosen = await dialog.showOpenDialog(mainWindow, { title: 'LOXT 보관함 저장 위치', properties: ['openDirectory', 'createDirectory'] });
   if (chosen.canceled) return { canceled: true };
   requireNoConversions(); if (pendingMemoIds.size || library.sessions.size || workspaceLibraries.live.sessions.size || youtube?.hasJobs || relocating) throw new Error('작업을 마친 뒤 저장 위치를 변경해 주세요.');
@@ -280,6 +285,26 @@ function memoFor(id) {
   if (stores.length !== 1) throw new Error('메모의 보관함을 확인해 주세요.');
   return new Memos(stores[0]);
 }
+const pdfFor = workspace => new (require('./pdfs.cjs').PDFs)(workspaceLibraries.get(workspace));
+handle('pdf:import', async payload => {
+  if (payload?.bytes) return pdfFor(payload.workspace).import(payload.bytes,payload.name,payload.folder || '');
+  const result=await dialog.showOpenDialog(mainWindow,{title:'PDF 불러오기',properties:['openFile'],filters:[{name:'PDF',extensions:['pdf']}]});
+  if(result.canceled)return {canceled:true};
+  const file=result.filePaths[0], bytes=await require('node:fs/promises').readFile(file);
+  return pdfFor(payload.workspace).import(bytes,path.basename(file),payload.folder || '');
+});
+handle('pdf:index', payload=>pdfFor(payload.workspace).index(payload));
+handle('pdf:get', payload => pdfFor(payload.workspace).read(payload.id));
+handle('pdf:save', payload => pdfFor(payload.workspace).save(payload));
+handle('pdf:bytes', payload => require('node:fs/promises').readFile(pdfFor(payload.workspace).file(payload.id)));
+handle('pdf:export', async payload => {
+  const pdf=pdfFor(payload.workspace), note=pdf.note(payload.id);
+  const result=await dialog.showSaveDialog(mainWindow,{title:'PDF 내보내기',defaultPath:note.title+'.pdf',filters:[{name:'PDF',extensions:['pdf']}]});
+  if(result.canceled)return {canceled:true};
+  const bytes=await pdf.export(payload.id,payload.annotated,path.join(__dirname,'../dist/pdf-font.ttf'));
+  const temp=result.filePath+'.'+require('node:crypto').randomUUID()+'.part';
+  await require('node:fs/promises').writeFile(temp,bytes);await require('node:fs/promises').rename(temp,result.filePath);return {canceled:false};
+});
 handle('memos:create', value => (value && typeof value === 'object' ? new Memos(workspaceLibraries.get(value.workspace)).create(value.folder || '') : memos.create(value || '')));
 handle('library:export-folder', payload => require('./folder-export.cjs').exportFolder(payload, {library:workspaceLibraries.get(payload?.workspace), dialog, mainWindow}));
 handle('memos:get', id => memoFor(id).read(id));
@@ -463,11 +488,12 @@ app.whenReady().then(async () => {
     library, onChange: () => { conversions?.changed(); live?.environmentChanged(); } });
   conversions = new ConversionQueue(transcriber, library, state => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('transcription:state', state);
+    deviceServer?.event('transcription',state);
     refreshBlocker();
   });
   conversions.liveLibrary = workspaceLibraries.live;
   conversions.defaults = workspace => preferences.snapshot()[workspace].model;
-  for (const workspace of ['work', 'live']) workspaceLibraries.get(workspace).onChange = revision => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('library:changed', { workspace, revision }); };
+  for (const workspace of ['work', 'live']) workspaceLibraries.get(workspace).onChange = revision => { deviceServer?.event('library',{workspace,revision}); if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('library:changed', { workspace, revision }); };
   youtube = new YouTubeImports({ root: path.join(app.getPath('userData'), 'youtube-imports'), executable: app.isPackaged ? path.join(process.resourcesPath, 'youtube', 'yt-dlp.exe') : path.join(__dirname, '../.runtime/youtube/yt-dlp.exe'), library, queue: conversions, notify: state => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('youtube:state', state);
     refreshBlocker();
@@ -475,17 +501,22 @@ app.whenReady().then(async () => {
   systemAudio = new SystemAudio(transcriber.auxiliary, event => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('system-audio:state', event); });
   live = new LiveEngine(transcriber, conversions, workspaceLibraries.live, state => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('live:state', state);
+    deviceServer?.event('live',state);
     refreshBlocker();
   }, event => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('live:meter', event); });
-  live.notifyPatch = patch => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('live:patch', patch); };
+  live.notifyPatch = patch => { deviceServer?.event('live',live.snapshot()); if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('live:patch', patch); };
   protocol.handle('sorinote-audio', audioResponse);
   protocol.handle('loxt-asset', async request => {
     try { const asset = await memoFor(new URL(request.url).pathname.split('/')[1]).asset(request.url); return new Response(request.method === 'HEAD' ? null : Readable.toWeb(createReadStream(asset.filename)), { headers: { 'Content-Type': asset.mime, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Access-Control-Allow-Origin': developmentUrl || 'null' } }); }
     catch { return new Response(null, { status: 404 }); }
   });
+  const {webServices}=require('./web-services.cjs');
+  const web=webServices({libraries:{get:mode=>workspaceLibraries.get(mode)},actions:libraryActions,conversions,preferences,root:path.join(app.getPath('userData'),'web-exports'),dist:path.join(__dirname,'../dist'),BrowserWindow,onRecordingChange:refreshBlocker,getLiveState:()=>live.snapshot(),isBusy:payload => Boolean(pendingMemoIds.size || live?.busy && (payload.ids?.includes(live.state.id) || payload.id===live.state.id))});
+  deviceServer=new (require('./device-server.cjs').DeviceServer)({root:path.join(app.getPath('userData'),'device-server'),dist:path.join(__dirname,'../dist'),...web,onState:state=>{if(mainWindow&&!mainWindow.isDestroyed())mainWindow.webContents.send('devices:state',state);}});
+  await deviceServer.initialize().catch(error=>{deviceServer.lastError=error.message;});
   createWindow();
   browserTabs = new BrowserTabs(mainWindow);
 });
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
-app.on('will-quit', () => { youtube?.shutdown(); systemAudio?.shutdown(); transcriber?.auxiliary.shutdown(); live?.shutdown(); conversions?.shutdown(); });
+app.on('will-quit', () => { deviceServer?.stop().catch(()=>{}); youtube?.shutdown(); systemAudio?.shutdown(); transcriber?.auxiliary.shutdown(); live?.shutdown(); conversions?.shutdown(); });

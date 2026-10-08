@@ -1,8 +1,8 @@
 # LOXT — Third-party notices
 
-확인일: 2026-10-05 · 소스 버전: 1.13.0
+확인일: 2026-10-08 · 앱 버전: 2.0.0
 
-LOXT 자체 코드의 저작권은 Copyright (c) 2026 threetrue03이며 MIT로 공개합니다. 아래 모델, 라이브러리, 글꼴, 실행 도구의 권리는 각 원 저작권자에게 있습니다. 이 고지는 외부 구성요소의 라이선스를 변경하지 않습니다. LOXT 로고는 별도 브랜드 사용 안내를 따릅니다.
+LOXT 자체 코드와 브랜드의 저작권은 Copyright (c) 2026 threetrue03입니다. 현재 배포는 독점적 배포 조건을 따르며 MIT 공개를 뜻하지 않습니다. 이전에 별도 라이선스로 배포된 사본의 조건은 해당 사본의 고지를 따릅니다. 아래 모델, 라이브러리, 글꼴, 실행 도구의 권리는 각 원 저작권자에게 있습니다. 이 고지는 외부 구성요소의 라이선스를 변경하지 않습니다. LOXT 로고는 별도 브랜드 사용 안내를 따릅니다.
 
 저장소: https://github.com/threetrue03/loxt
 모델 출처: https://github.com/threetrue03/loxt/blob/main/docs/MODEL-LICENSES.md
@@ -47,7 +47,7 @@ Python 원문은 함께 제공하는 런타임의 LICENSE.txt에 있습니다. E
 
 PyAV wheel은 FFmpeg 라이브러리를 포함할 수 있습니다. FFmpeg의 LGPL-2.1-or-later 및 선택한 빌드 구성에 따른 GPL 조건은 PyAV의 BSD 라이선스와 구분해야 합니다. 실제 wheel의 빌드 구성과 포함 라이브러리 고지를 확인하고, 재배포 시 정확히 대응하는 소스 제공 등 조건을 이행해야 합니다: https://ffmpeg.org/legal.html
 
-NVIDIA CUDA/cuBLAS/cuDNN은 LOXT의 MIT 라이선스로 제공하지 않습니다. 설치한 wheel의 NVIDIA 라이선스와 재배포 조건이 적용됩니다. cuDNN 조건: https://docs.nvidia.com/deeplearning/cudnn/backend/latest/reference/eula.html
+NVIDIA CUDA/cuBLAS/cuDNN은 LOXT 자체 배포 조건로 제공하지 않습니다. 설치한 wheel의 NVIDIA 라이선스와 재배포 조건이 적용됩니다. cuDNN 조건: https://docs.nvidia.com/deeplearning/cudnn/backend/latest/reference/eula.html
 GPU 드라이버는 PC 소유자가 별도로 설치합니다.
 
 ## 글꼴
@@ -80,11 +80,11 @@ https://github.com/yt-dlp/yt-dlp/tree/2026.08.19
 GPLv3 원문: https://www.gnu.org/licenses/gpl-3.0.txt
 저장소의 원문 사본: docs/licenses/GPL-3.0.txt
 
-이 실행 파일을 다시 배포할 때는 GPL 고지, 라이선스 원문, 정확히 대응하는 소스와 포함된 구성요소의 조건을 이행해야 합니다. upstream URL만 고지했다고 모든 바이너리 재배포 의무가 완료된다고 주장하지 않습니다. LOXT 코드의 MIT 라이선스로 이 실행 파일의 조건을 대체해서는 안 됩니다.
+이 실행 파일을 다시 배포할 때는 GPL 고지, 라이선스 원문, 정확히 대응하는 소스와 포함된 구성요소의 조건을 이행해야 합니다. upstream URL만 고지했다고 모든 바이너리 재배포 의무가 완료된다고 주장하지 않습니다. LOXT 자체 배포 조건로 이 실행 파일의 조건을 대체해서는 안 됩니다.
 
 ## 개발 자료와 고지 범위
 
-저장소의 .agents/skills 등 외부 개발 도구·문서는 해당 upstream과 포함된 라이선스를 따릅니다. 예를 들어 frontend-design에 포함된 LICENSE.txt는 Apache-2.0입니다. LOXT의 MIT 고지가 외부 파일의 기존 권리와 고지를 대체하지 않습니다.
+저장소의 .agents/skills 등 외부 개발 도구·문서는 해당 upstream과 포함된 라이선스를 따릅니다. 예를 들어 frontend-design에 포함된 LICENSE.txt는 Apache-2.0입니다. LOXT 자체 고지가 외부 파일의 기존 권리와 고지를 대체하지 않습니다.
 
 이 문서는 주요 구성요소의 출처·저작권 안내입니다. 모든 전이 의존성에 대한 SBOM이나 완성된 재배포 감사 결과는 아닙니다. 설치 파일을 변경·재배포할 때 각 배포본의 원문과 대응 소스를 확인해야 합니다.
 
@@ -93,6 +93,15 @@ GPLv3 원문: https://www.gnu.org/licenses/gpl-3.0.txt
 
 ## 메모 편집기 (1.13.0)
 
-BlockNote core / react / mantine / code-block / math-block 0.55.0은 TypeCellOS 및 BlockNote 기여자가 제공하며 MPL-2.0입니다. 원본 패키지 소스는 수정하지 않았습니다. LOXT의 자체 코드에는 MIT가 유지됩니다. BlockNote 소스와 라이선스는 https://github.com/TypeCellOS/BlockNote 및 https://www.npmjs.com/package/@blocknote/core/v/0.55.0 에서 확인할 수 있습니다. 설치본의 `resources/editor-licenses/`에 각 패키지의 저작권·라이선스 원문을 함께 배포합니다. GPL 상용 확장 패키지(`@blocknote/xl-*`)는 사용하지 않습니다.
+BlockNote core / react / mantine / code-block / math-block 0.55.0은 TypeCellOS 및 BlockNote 기여자가 제공하며 MPL-2.0입니다. 원본 패키지 소스는 수정하지 않았습니다. LOXT 자체 코드의 배포 조건과 별개로 해당 구성요소의 MPL-2.0 조건을 유지합니다. BlockNote 소스와 라이선스는 https://github.com/TypeCellOS/BlockNote 및 https://www.npmjs.com/package/@blocknote/core/v/0.55.0 에서 확인할 수 있습니다. 설치본의 `resources/editor-licenses/`에 각 패키지의 저작권·라이선스 원문을 함께 배포합니다. GPL 상용 확장 패키지(`@blocknote/xl-*`)는 사용하지 않습니다.
 
 Mantine 8.3.11, Tiptap/ProseMirror, Shiki, KaTeX, Floating UI, sanitize-html 2.18.0 등 편집기 의존성은 각 제공자의 라이선스를 따릅니다. 정확한 버전·라이선스·소스 주소 목록은 `editor-licenses/index.json` 및 저장소의 `docs/licenses/editor-packages.json`에 기록합니다. BlockNote MPL-2.0 원문은 `docs/licenses/BlockNote-MPL-2.0.txt`에도 보관합니다.
+
+
+## PDF와 개인 HTTPS 연결 (2.0.0)
+
+PDF.js 6.4.299 (Mozilla, Apache-2.0), pdf-lib 1.17.1 (MIT), @pdf-lib/fontkit 1.1.1 (MIT), qrcode 1.5.4 (MIT), node-forge 1.4.0 (패키지의 BSD/GPL 고지)는 각각의 라이선스를 유지합니다. 설치본 resources/editor-licenses에 원문을 배포하며 정확한 의존성 목록은 docs/licenses/editor-packages.json에 있습니다.
+
+PDF 한글 내보내기용 LOXT PDF Sans는 Noto Sans KR에서 만든 파생 글꼴입니다. weight 400 정적화와 GSUB 제거로 PDF 포함·텍스트 복사 호환성을 맞췄으며 SIL Open Font License 1.1입니다. UI 글꼴은 기존 SUIT를 유지합니다. 원문: https://github.com/google/fonts/blob/main/ofl/notosanskr/OFL.txt . 저장소 docs/licenses/NotoSansKR-OFL.txt와 설치본 PDF 글꼴 옆 pdf-font-LICENSE.txt에 고지를 포함합니다.
+
+개인 기기 연결을 켜고 PC에서 승인한 기기는 로컬 HTTPS를 통해 사용자 보관함에 접근합니다. 데이터가 개발자의 공용 서버로 업로드되는 구조가 아닙니다.

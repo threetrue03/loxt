@@ -8,7 +8,7 @@ const MIME = { '.webm': 'audio/webm', '.ogg': 'audio/ogg', '.mp3': 'audio/mpeg',
 function validNote(note) {
   return note && typeof note === 'object' && ID.test(note.id)
     && typeof note.title === 'string' && typeof note.folder === 'string'
-    && Array.isArray(note.segments) && (note.kind === 'memo' || (typeof note.audioFile === 'string' && path.basename(note.audioFile) === note.audioFile
+    && Array.isArray(note.segments) && (note.kind === 'memo' || (note.kind === 'pdf' && note.audioFile === 'original.pdf' && Number.isSafeInteger(note.pages) && note.pages > 0) || (typeof note.audioFile === 'string' && path.basename(note.audioFile) === note.audioFile
     && Boolean(MIME[path.extname(note.audioFile)])));
 }
 function recoverConversion(note) {
@@ -352,7 +352,7 @@ class Library {
   beginRecording(payload) {
     return this.enqueue(async () => {
       const mime = payload?.mime;
-      const ext = mime === 'audio/webm' ? '.webm' : mime === 'audio/ogg' ? '.ogg' : mime === 'audio/wav' ? '.wav' : null;
+      const ext = mime === 'audio/webm' ? '.webm' : mime === 'audio/ogg' ? '.ogg' : mime === 'audio/wav' ? '.wav' : mime === 'audio/mp4' ? '.m4a' : null;
       if (!ext) throw new Error('지원하지 않는 녹음 형식입니다.');
       const note = { id: randomUUID(), title: title(payload.title), folder: this.validateFolder(payload.folder || ''), date: date(), createdAt: new Date().toISOString(), seconds: 0, duration: '00:00', done: false, deleted: false, segments: [], audioFile: 'audio' + ext, mime, status: 'recording' };
       if (mime === 'audio/wav') note.live = true;
@@ -462,10 +462,11 @@ class Library {
       return { library, note };
     });
   }
-  updateNote(id, changes) {
+  updateNote(id, changes, expected) {
     return this.enqueue(async () => {
       const original = this.data.notes.find(n => n.id === id);
       if (!original) throw new Error('녹음을 찾지 못했습니다.');
+      if(expected&&['title','folder','deleted'].some(key=>Object.hasOwn(expected,key)&&original[key]!==expected[key])){const error=new Error('다른 기기에서 기록이 변경되었습니다. 최신 내용을 확인한 뒤 다시 시도해 주세요.');error.code='CONFLICT';throw error;}
       const note = { ...original };
       if (Object.hasOwn(changes, 'title')) note.title = title(changes.title);
       if (Object.hasOwn(changes, 'folder')) note.folder = this.validateFolder(changes.folder);
@@ -483,14 +484,14 @@ class Library {
   setTranscription(id, changes) {
     return this.enqueue(async () => {
       const note = this.data.notes.find(n => n.id === id);
-      if (!note || note.kind === 'memo' || (note.deleted && changes.status === 'transcribing') || note.status === 'recording') throw new Error('전사할 원본을 찾지 못했습니다.');
+      if (!note || ['memo','pdf'].includes(note.kind) || (note.deleted && changes.status === 'transcribing') || note.status === 'recording') throw new Error('전사할 원본을 찾지 못했습니다.');
       return this.saveNote({ ...note, ...changes });
     });
   }
   completeTranscription(id, result) {
     return this.enqueue(async () => {
       const note = this.data.notes.find(n => n.id === id);
-      if (!note || note.kind === 'memo' || !Array.isArray(result.segments) || !Number.isFinite(result.seconds) || result.seconds < 0
+      if (!note || ['memo','pdf'].includes(note.kind) || !Array.isArray(result.segments) || !Number.isFinite(result.seconds) || result.seconds < 0
         || !result.segments.every(s => Number.isFinite(s.start) && Number.isFinite(s.end) && s.start >= 0 && s.end >= s.start && typeof s.text === 'string')) throw new Error('전사 결과 형식이 올바르지 않습니다.');
       if (result.segments.some(s => s.start >= result.seconds || s.end > result.seconds)) throw new Error('스크립트 시간이 원본 녹음 길이를 초과했습니다. 다시 변환해 주세요.');
       const directory = path.join(this.recordings, id);
@@ -509,7 +510,7 @@ class Library {
     await this.ready;
     if (!ID.test(id)) throw new Error('잘못된 녹음 ID입니다.');
     const note = this.data.notes.find(n => n.id === id);
-    if (!note || note.kind === 'memo' || !MIME[path.extname(note.audioFile)] || path.basename(note.audioFile) !== note.audioFile) throw new Error('녹음을 찾지 못했습니다.');
+    if (!note || ['memo','pdf'].includes(note.kind) || !MIME[path.extname(note.audioFile)] || path.basename(note.audioFile) !== note.audioFile) throw new Error('녹음을 찾지 못했습니다.');
     return { filename: path.join(this.recordings, id, note.audioFile), mime: note.mime };
   }
 }
