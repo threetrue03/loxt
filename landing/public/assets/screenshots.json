@@ -1,9 +1,9 @@
 {
-  "version": "2.0.0",
+  "version": "2.1.0",
   "examples": true,
   "liveInference": false,
   "exampleAudio": "silent WAV and scripted transcript/speaker data; not accuracy or speed measurements",
-  "capturedAt": "2026-10-08T08:04:12.790Z",
+  "capturedAt": "2026-10-08T12:28:31.468Z",
   "images": [
     {
       "file": "sidebar-collapsed-work.png",
@@ -160,6 +160,27 @@
       "width": 1783,
       "height": 1079,
       "scenario": "personal-device-connection"
+    },
+    {
+      "file": "mobile-home.png",
+      "width": 390,
+      "height": 844,
+      "scenario": "approved-mobile-work-home",
+      "example": true
+    },
+    {
+      "file": "mobile-library.png",
+      "width": 390,
+      "height": 844,
+      "scenario": "approved-mobile-work-library",
+      "example": true
+    },
+    {
+      "file": "mobile-live-home.png",
+      "width": 390,
+      "height": 844,
+      "scenario": "approved-mobile-live-home",
+      "example": true
     },
     {
       "file": "mobile-pdf.png",

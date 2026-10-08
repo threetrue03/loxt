@@ -10,10 +10,10 @@
   <p>녹음하고, 변환하고, 메모하세요. 기록은 내 PC에.</p>
 
   <img src="https://img.shields.io/badge/Windows-x64-0078D4.svg" alt="Windows x64">
-  <img src="https://img.shields.io/badge/Version-2.0.0-59695D.svg" alt="소개 버전 2.0.0">
+  <img src="https://img.shields.io/badge/Version-2.1.0-59695D.svg" alt="소개 버전 2.1.0">
 
   <p>
-    <a href="https://github.com/threetrue03/loxt/releases/download/v2.0.0/LOXT-Setup-2.0.0-x64.exe"><strong>Windows 다운로드 · v2.0.0</strong></a> ·
+    <a href="https://github.com/threetrue03/loxt/releases/download/v2.1.0/LOXT-Setup-2.1.0-x64.exe"><strong>Windows 다운로드 · v2.1.0</strong></a> ·
     <a href="https://loxt.pages.dev/">소개 사이트</a> ·
     <a href="https://github.com/threetrue03/loxt/releases">릴리스 안내</a> ·
     <a href="https://github.com/threetrue03/loxt/issues">문의 · 버그 신고</a>
@@ -34,7 +34,7 @@ LOXT는 내 컴퓨터의 하드웨어로 음성을 스크립트로 변환하는 
   <img src="./docs/assets/workspace-dark.png" alt="LOXT Work 홈: 녹음, 파일·YouTube 불러오기, 내 보관함과 진행 중인 작업" width="100%">
 </picture>
 
-*2.0.0 실제 앱 화면입니다. 녹음·스크립트·메모는 소개용 예시이며 변환 정확도나 속도의 측정 결과가 아닙니다.*
+*2.1.0 실제 앱 화면입니다. 녹음·스크립트·메모는 소개용 예시이며 변환 정확도나 속도의 측정 결과가 아닙니다.*
 
 ## Work와 Live
 
@@ -75,22 +75,20 @@ LOXT는 내 컴퓨터의 하드웨어로 음성을 스크립트로 변환하는 
 | **변환 대기열** | 다른 페이지로 이동해도 변환을 유지하고 작업별 상태 확인·취소를 제공합니다. |
 | **화면과 설정** | SUIT 글꼴, 다크·라이트 테마, 카드·작은 카드·목록 보기와 Work·Live별 기본 모델·입력 장치를 제공합니다. |
 
-## 2.0.0 — PDF 필기와 내 기기 연결
+## 2.1.0 — 모바일 탐색과 연결 주소
 
-- PDF 가져오기·페이지 미리보기·확대·텍스트 검색/복사, 펜·형광펜·지우개·텍스트·도형을 지원합니다. 원본은 유지하고 필기를 자동 저장하며 원본 또는 필기 포함 PDF로 내보냅니다.
-- PC의 **설정 → 내 기기 연결**을 켜면 같은 Wi-Fi의 승인한 모바일에서 동일한 Work·Live 보관함을 사용합니다. 인증서 신뢰와 QR·PC 승인 안내를 제공합니다.
-- 모바일 Work 마이크 녹음·음성 업로드와 PC 모델로 변환 요청을 지원합니다. 메모·PDF를 동시 수정하면 충돌을 안내하고 사본을 보존할 수 있습니다.
-- Work의 일반 일시정지와 최종 중단을 구분했습니다. 최종 중단은 원본을 저장하고 왼쪽 **버리기**, 오른쪽 단독 **변환하기**를 표시합니다. 선택 창 안의 버리기와 중단 후 장치 메뉴를 제거했습니다.
-- 좁은 화면의 보관함·제목·설정·메모 도구 모음을 정리하고 스크립트 내보내기를 주변 버튼 크기에 맞췄습니다. 모달 배경 처리에 로고와 상단 바를 포함합니다.
-- 기존 녹음·스크립트·메모·폴더·모델과 Work·Live 분리를 유지합니다.
+- 좁은 모바일 웹에서는 **홈·보관함·최근·설정** 하단 탐색으로 이동합니다. PDF·메모·녹음·스크립트 상세는 탐색 바를 숨겨 편집 공간을 확보합니다. 넓은 화면과 PC 앱은 기존 사이드바를 유지합니다.
+- PC의 **설정 → 내 기기 연결**에서 처음 연결할 주소, 재접속 주소, 인증서 설치 주소를 구분했습니다. Windows 클립보드로 복사하고 성공·실패를 표시합니다. 처음 연결 주소와 QR은 5분간 유효하며 PC 승인이 필요합니다.
+- 소개 사이트 상단 **LOXT로 가기** 또는 다운로드 아래 설치 완료 안내에서 내 PC의 웹 주소를 등록해 이동하세요. 재접속 주소만 해당 브라우저에 저장하며, 변경·삭제할 수 있습니다. 승인 토큰은 저장하지 않습니다.
+- 같은 Wi-Fi, 실행 중인 PC 앱과 연결 서버, 처음 접속하는 기기의 인증서 신뢰·PC 승인이 필요합니다. 소개 사이트는 PC를 자동 검색하거나 실행하지 않습니다.
+- 기존 PDF 필기, 모바일 Work 녹음과 PC 변환, 메모·보관함·모델·설정은 유지합니다.
 
-[릴리스 안내](./docs/release-2.0.0.md) · [연결 안내](./docs/device-connection-2.0.0.md) · [검증 기록](./docs/verification-2.0.0.md)
+[릴리스 안내](./docs/release-2.1.0.md) · [연결 안내](./docs/device-connection-2.1.0.md) · [검증 기록](./docs/verification-2.1.0.md)
 
-![PDF 읽기와 필기](./landing/public/assets/pdf.png)
+![모바일 홈과 하단 탐색](./landing/public/assets/mobile-home.png)
 
 ![개인 기기 연결](./landing/public/assets/device-settings.png)
 
-*실제 2.0.0 설치본의 비공개 예시 자료입니다. 캡처의 예시 문장은 추론 성능의 증거가 아닙니다.*
 
 ## PDF와 모바일
 

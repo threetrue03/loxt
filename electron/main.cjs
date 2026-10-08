@@ -184,6 +184,17 @@ function publishSettings() {
 handle('devices:state', () => deviceServer?.snapshot() || {enabled:false,running:false});
 handle('devices:configure', enabled => deviceServer.configure(enabled));
 handle('devices:qr', () => deviceServer.newQR());
+handle('devices:copy', async payload => {
+  const address=await deviceServer.copyAddress(payload?.kind,payload?.index ?? 0);
+  for(let attempt=0;attempt<4;attempt++) {
+    try {
+      await clipboard.writeText(address);
+      if(await clipboard.readText()===address)return true;
+    } catch { /* A temporarily busy clipboard can be retried. */ }
+    await new Promise(resolve=>setTimeout(resolve,80));
+  }
+  throw new Error('주소를 복사하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+});
 handle('devices:approve', payload => deviceServer.approve(payload.id,payload.allow));
 handle('devices:revoke', id => deviceServer.revoke(id));
 handle('preferences:get', () => preferences.snapshot());

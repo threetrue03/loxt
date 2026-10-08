@@ -47,6 +47,7 @@ body{font-family:SUIT,sans-serif}.sidebar-top{height:44px;justify-content:space-
 .unified-menu,.action-menu{font-family:SUIT,sans-serif}
 
 /* Fixed app header; the sidebar occupies only the space below it. */
+.mobile-navigation,.mobile-library-tools{display:none}
 .app{display:grid;grid-template-columns:var(--sidebar-width) minmax(0,1fr);grid-template-rows:52px minmax(0,1fr);transition:grid-template-columns .24s cubic-bezier(.2,.8,.2,1)}
 .app-header{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:8px 12px;background:var(--theme-surface-header);border-bottom:1px solid var(--theme-border-343432);z-index:15}
 .app-header .brand-home,.sidebar-collapsed .app-header .brand-home{position:static;transform:none;min-height:30px}
@@ -232,3 +233,5 @@ html[data-theme="light"]{color-scheme:light;--side:#F6F6F4}
 .settings-phase{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
 body{user-select:none}
 input,textarea,[contenteditable="true"],[contenteditable="true"] *,.transcript,.transcript *,.note-preview,.note-preview *,.memo-scroll,.memo-scroll *{user-select:text}
+
+.device-settings img{display:block;border-radius:8px;margin:16px 0}.device-settings code,.device-settings .hint{overflow-wrap:anywhere}.device-settings details{margin:20px 0}.device-settings ol{padding-left:20px;line-height:1.8}.device-settings h3{margin:24px 0 12px}

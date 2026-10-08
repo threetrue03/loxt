@@ -14,7 +14,7 @@ else {
 }
 
 contextBridge.exposeInMainWorld('desktop', Object.freeze({
-  devices: Object.freeze({ get:()=>ipcRenderer.invoke('devices:state'), configure:enabled=>ipcRenderer.invoke('devices:configure',enabled), qr:()=>ipcRenderer.invoke('devices:qr'), approve:(id,allow)=>ipcRenderer.invoke('devices:approve',{id,allow}), revoke:id=>ipcRenderer.invoke('devices:revoke',id), onState:callback=>{const listener=(_event,value)=>callback(value);ipcRenderer.on('devices:state',listener);return()=>ipcRenderer.removeListener('devices:state',listener);} }),
+  devices: Object.freeze({ get:()=>ipcRenderer.invoke('devices:state'), configure:enabled=>ipcRenderer.invoke('devices:configure',enabled), qr:()=>ipcRenderer.invoke('devices:qr'), copy:(kind,index=0)=>ipcRenderer.invoke('devices:copy',{kind,index}), approve:(id,allow)=>ipcRenderer.invoke('devices:approve',{id,allow}), revoke:id=>ipcRenderer.invoke('devices:revoke',id), onState:callback=>{const listener=(_event,value)=>callback(value);ipcRenderer.on('devices:state',listener);return()=>ipcRenderer.removeListener('devices:state',listener);} }),
   pdf: Object.freeze({ index:payload=>ipcRenderer.invoke('pdf:index',payload), import: payload => ipcRenderer.invoke('pdf:import',payload), get: payload => ipcRenderer.invoke('pdf:get',payload), save: payload => ipcRenderer.invoke('pdf:save',payload), bytes: payload => ipcRenderer.invoke('pdf:bytes',payload), export: payload => ipcRenderer.invoke('pdf:export',payload) }),
   browser: Object.freeze({
     command: payload => ipcRenderer.invoke('browser:command', payload),
