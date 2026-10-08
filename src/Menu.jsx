@@ -10,6 +10,7 @@ export default function Menu({ label, trigger, children, className = '', disable
     if (!open) return;
     const popup = panel.current;
     const place = () => {
+      if (!button.current || !popup?.isConnected) return;
       const anchor = button.current.getBoundingClientRect();
       if (className.includes('custom-select')) popup.style.width = `${Math.min(innerWidth - 16, Math.max(180, Math.min(320, anchor.width)))}px`;
       const box = popup.getBoundingClientRect();
@@ -17,7 +18,7 @@ export default function Menu({ label, trigger, children, className = '', disable
       const below = anchor.bottom + 6, above = anchor.top - box.height - 6;
       popup.style.top = `${Math.max(8, Math.min((upward || below + box.height > innerHeight - 8) && above >= 8 ? above : below, innerHeight - box.height - 8))}px`;
     };
-    function outside(event) { if (!root.current.contains(event.target) && !popup.contains(event.target)) setOpen(false); }
+    function outside(event) { if (root.current && !root.current.contains(event.target) && !popup.contains(event.target)) setOpen(false); }
     function keys(event) {
       if (event.key === 'Escape') { event.preventDefault(); setOpen(false); button.current.focus(); }
       if (event.key === 'Tab') {

@@ -35,7 +35,7 @@ export default function NoteCard({ note, selected, onOpen, onMenu, editing, onRe
     </div>
     <span className="cell date">{note.date}</span>
     <span className="cell duration">{note.kind === 'memo' ? '—' : <><Icon name="clock"/>{note.duration}</>}</span>
-    <span className={`status ${tone}`}>{status}</span>
+    {layout === 'list' || (note.kind !== 'memo' && !note.done) || ['failed','partial','queued','transcribing'].includes(note.status) ? <span className={`status ${tone}`}>{status}</span> : null}
     <button className="more" aria-label={`${note.title} 관리`} aria-haspopup="menu" onClick={event => onMenu(event, false)}><Icon name="more"/></button>
     </> : null}
   </article>;

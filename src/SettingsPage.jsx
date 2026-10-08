@@ -16,6 +16,14 @@ export default function SettingsPage({ mode = 'work' }) {
   const [environment, setEnvironment] = useState(null), [environmentError, setEnvironmentError] = useState('');
   const [appInfo, setAppInfo] = useState(null), [confirmDelete, setConfirmDelete] = useState(null), [localPending, setLocalPending] = useState(null);
   const [storage, setStorage] = useState(null), [storageLoading, setStorageLoading] = useState(false), [supportError, setSupportError] = useState(''), [notice, setNotice] = useState('');
+  const [movingLibrary,setMovingLibrary] = useState(false);
+  async function moveLibrary() {
+    if (movingLibrary) return;
+    setMovingLibrary(true); setSupportError(''); setNotice('');
+    try { const result = await window.desktop.settings.moveLibrary(); if (!result.canceled) { await readStorage(true); setNotice('보관함 위치를 변경했습니다. 기존 위치의 파일은 안전을 위해 보존했습니다.'); } }
+    catch (error) { setSupportError(cleanError(error)); }
+    finally { setMovingLibrary(false); }
+  }
   const mounted = useRef(true), request = useRef(false), storageGeneration = useRef(0);
   const inputs = useInputDevices(tab === 'recording');
   const defaults = preferences[mode], title = settingsTabs.find(item => item[0] === tab)?.[1];
@@ -97,7 +105,7 @@ export default function SettingsPage({ mode = 'work' }) {
       {operation.issues?.import ? <p className="error-message" role="alert">{operation.issues.import.text} <button className="secondary" disabled={working || !catalogReady} onClick={() => act('import', 'import')}>다시 시도</button></p> : null}
       {operation.message ? <p className="hint" role="status">{operation.message}</p> : null}
     </section> : null}
-    {tab === 'storage' ? <section className="settings-section"><p className="hint">녹음과 스크립트, 설치된 모델의 저장 위치입니다.</p><button className="secondary" disabled={storageLoading} onClick={() => readStorage(true)}>사용량 다시 확인</button>{storageLoading ? <p className="hint" role="status">사용량을 계산하는 중…</p> : null}
+    {tab === 'storage' ? <section className="settings-section"><div className="settings-row"><div><h2>보관함 저장 위치</h2><p className="hint">Work·Live 기록과 메모를 함께 이전합니다. 설치된 모델은 유지됩니다.</p></div><button className="secondary" disabled={movingLibrary} onClick={moveLibrary}>{movingLibrary ? '복사·검증 중…' : '저장 위치 변경'}</button></div>{movingLibrary ? <p className="hint" role="status">파일 검증이 끝날 때까지 앱을 닫지 마세요. 기존 파일은 보존됩니다.</p> : null}<p className="hint">녹음과 스크립트, 설치된 모델의 저장 위치입니다.</p><button className="secondary" disabled={storageLoading} onClick={() => readStorage(true)}>사용량 다시 확인</button>{storageLoading ? <p className="hint" role="status">사용량을 계산하는 중…</p> : null}
       {storage?.rows.map(row => <section className="storage-entry" key={row.id}><div className="storage-entry-heading"><h2>{row.id === 'models' ? '모델 보관함' : `${labelMode(row.id)} 보관함`}</h2><span>{row.error ? '확인 실패' : size(row.bytes)}</span></div><div className="storage-path">{row.path}</div><div className="settings-actions"><button className="secondary" onClick={() => support(() => window.desktop.settings.location(row.id))}><Icon name="folder"/>저장 위치 열기</button><button className="secondary" onClick={() => support(() => window.desktop.settings.location(row.id, true), '경로를 복사했습니다.')}><Icon name="copy"/>경로 복사</button></div>{row.error ? <p className="error-message" role="alert">{row.error}</p> : <p className="hint">{row.free != null ? `드라이브 여유 공간 ${size(row.free)}` : '드라이브 여유 공간 미확인'}{row.skipped ? ' · 연결된 파일·폴더와 중복 파일은 집계에서 제외했습니다.' : ''}</p>}</section>)}
       {storage ? <p className="hint">마지막 확인 {new Intl.DateTimeFormat('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(storage.checkedAt)}</p> : null}</section> : null}
     {tab === 'about' ? <section className="settings-section"><div className="about-brand"><Brand/><span>{appInfo?.version || '확인 중…'}</span></div><p className="hint">새 설치 파일로 업데이트할 수 있습니다. 기존 기록과 설정은 유지됩니다.</p><div className="settings-actions">{[['releases', '공식 릴리스'], ['changes', '변경 사항'], ['license', '라이선스'], ['notices', '외부 구성 요소 고지']].map(([id, label]) => <button className="secondary" key={id} onClick={() => support(() => window.desktop.settings.link(id))}>{label}</button>)}</div>

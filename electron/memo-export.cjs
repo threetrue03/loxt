@@ -42,15 +42,7 @@ async function exportMemo(payload, { memos, dialog, BrowserWindow, mainWindow })
     }
     await fs.writeFile(result.filePath, '\ufeff' + text, 'utf8');
   } else {
-    text = text.replace(/<details(?:\s[^>]*)?>/g, '<details open>');
-    const temporary = await fs.mkdtemp(path.join(require('node:os').tmpdir(), 'loxt-memo-export-'));
-    const preview = new BrowserWindow({ show: false, webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, javascript: false } });
-    try {
-      preview.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-      const filename = path.join(temporary, 'document.html'); await fs.writeFile(filename, text);
-      await preview.loadFile(filename);
-      await fs.writeFile(result.filePath, await preview.webContents.printToPDF({ printBackground: true, pageSize: 'A4', margins: { top: .6, bottom: .6, left: .6, right: .6 } }));
-    } finally { preview.destroy(); await fs.unlink(path.join(temporary, 'document.html')).catch(() => {}); await fs.rmdir(temporary).catch(() => {}); }
+    await require('./pdf-export.cjs').printPDF(text, result.filePath, BrowserWindow);
   }
   return { canceled: false };
 }

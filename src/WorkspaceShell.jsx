@@ -2,6 +2,7 @@ import WorkspaceBoundary from './WorkspaceBoundary.jsx';
 import { useCallback, useState } from 'react';
 import App from './App.jsx';
 import LiveWorkspace from './LiveWorkspace.jsx';
+import { PanelProvider } from './PanelTabs.jsx';
 
 export default function WorkspaceShell() {
   const [workspace, setWorkspace] = useState(() => {
@@ -21,5 +22,5 @@ export default function WorkspaceShell() {
     requestAnimationFrame(() => document.querySelector('.workspace-panel:not([hidden]) .workspace-menu .menu-trigger')?.focus());
   }, []);
   // Keep Work mounted: its recorder and conversion subscriptions must survive switching.
-  return <><div className="workspace-panel" data-workspace="work" hidden={workspace !== 'work'}><WorkspaceBoundary><App liveActive={liveActive} workspaceActive={workspace === 'work'} onWorkspaceChange={changeWorkspace} onBackgroundChange={setWorkActive}/></WorkspaceBoundary></div>{visitedLive ? <div className="workspace-panel" data-workspace="live" hidden={workspace !== 'live'}><WorkspaceBoundary><LiveWorkspace returnToRecording={liveReturn} onBackgroundChange={setLiveActive} active={workspace === 'live'} workActive={workActive} onWorkspaceChange={changeWorkspace}/></WorkspaceBoundary></div> : null}</>;
+  return <PanelProvider workspace={workspace} onWorkspaceChange={changeWorkspace}><div className="workspace-panel" data-workspace="work" hidden={workspace !== 'work'}><WorkspaceBoundary><App liveActive={liveActive} workspaceActive={workspace === 'work'} onWorkspaceChange={changeWorkspace} onBackgroundChange={setWorkActive}/></WorkspaceBoundary></div>{visitedLive ? <div className="workspace-panel" data-workspace="live" hidden={workspace !== 'live'}><WorkspaceBoundary><LiveWorkspace returnToRecording={liveReturn} onBackgroundChange={setLiveActive} active={workspace === 'live'} workActive={workActive} onWorkspaceChange={changeWorkspace}/></WorkspaceBoundary></div> : null}</PanelProvider>;
 }

@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 const require = createRequire(import.meta.url), { Library } = require('../electron/library.cjs'), { Memos } = require('../electron/memos.cjs'), { waveHeader } = require('../electron/pcm-wave.cjs');
-const out = path.resolve('test-results/memos-1.13.0'); await mkdir(out,{recursive:true}); const profile=await mkdtemp(path.join(out,'profile-'));
+const out = path.resolve('test-results/memos-1.15.0'); await mkdir(out,{recursive:true}); const profile=await mkdtemp(path.join(out,'profile-'));
 const library=new Library(path.join(profile,'library')); await library.ready; const memos=new Memos(library);
 await library.createFolder({name:'회의 메모'}); const {note}=await memos.create('회의 메모'); await library.updateNote(note.id,{title:'프로젝트 메모'});
 const text = value => [{type:'text',text:value,styles:{}}], block=(type,content,extra={})=>({id:randomUUID(),type,content,children:[],...extra});
@@ -19,13 +19,13 @@ let app; const errors=[],results={profile,fixture:'Example blocks and an artific
 const executablePath=process.argv.slice(2).find(arg=>arg.endsWith('.exe'));
 try {
   app=await electron.launch({...(executablePath?{executablePath:path.resolve(executablePath),args:[]}:{args:['.']}),env}); const page=await app.firstWindow(); page.setDefaultTimeout(15000); page.on('pageerror',e=>errors.push(e.message));
-  results.version=(await page.evaluate(()=>window.desktop.getAppInfo())).version;assert.equal(results.version,'1.13.0');results.packaged=Boolean(executablePath);
+  results.version=(await page.evaluate(()=>window.desktop.getAppInfo())).version;assert.equal(results.version,'1.15.0');results.packaged=Boolean(executablePath);
   await app.evaluate(async({clipboard})=>{globalThis.memoTestClipboard=await clipboard.readText();});
   const panel=()=>page.locator('.workspace-panel:not([hidden])');
   await app.evaluate(({BrowserWindow})=>{BrowserWindow.getAllWindows()[0].setSize(1400,900);BrowserWindow.getAllWindows()[0].show();});
   const capture=async name=>{await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));const data=await app.evaluate(async({BrowserWindow})=>(await BrowserWindow.getAllWindows()[0].webContents.capturePage()).toPNG().toString('base64'));await writeFile(path.join(out,name+'.png'),Buffer.from(data,'base64'));};
   await panel().getByRole('heading',{name:'홈',exact:true}).waitFor();
-  await panel().getByRole('button',{name:'새로 추가하기',exact:true}).click();await page.getByRole('menuitem',{name:'새 메모',exact:true}).click();await page.getByRole('textbox',{name:'메모 제목 변경'}).waitFor();
+  await panel().getByRole('button',{name:'내 보관함',exact:true}).click();await panel().getByRole('button',{name:'새로 추가하기',exact:true}).click();await page.getByRole('menuitem',{name:'새 메모',exact:true}).click();await page.getByRole('textbox',{name:'메모 제목 변경'}).waitFor();
   const fresh=await page.evaluate(async()=> (await window.desktop.getLibrary()).notes.find(n=>n.kind==='memo'&&n.title==='새 메모').id);
   await page.getByRole('textbox',{name:'메모 제목 변경'}).fill('새 메모 테스트');await page.getByRole('textbox',{name:'메모 제목 변경'}).press('Enter');
   const freshEditor=page.locator('.memo-editor .bn-editor');await freshEditor.waitFor();await freshEditor.click();await page.keyboard.type('# ');await page.keyboard.type('Markdown title');
@@ -60,9 +60,9 @@ try {
   await page.waitForFunction(async id=>JSON.stringify((await window.desktop.memos.get(id)).blocks).includes('autosave'),note.id);
   results.autosave=true;
   // Real filesystem failure in this private test profile.
-  const temp=path.join(library.recordings,note.id,'memo.json.tmp');await mkdir(temp);await page.keyboard.type(' retry');await page.locator('.memo-error').filter({hasText:'다시 시도'}).waitFor();
+  await app.evaluate(({ipcMain})=>{globalThis.originalMemoSave=ipcMain._invokeHandlers.get('memos:save');ipcMain.removeHandler('memos:save');ipcMain.handle('memos:save',()=>{throw new Error('test: save denied');});});await page.keyboard.type(' retry');await page.locator('.memo-error').filter({hasText:'다시 시도'}).waitFor();
   await panel().getByRole('button',{name:'홈',exact:true}).click();await page.getByRole('button',{name:'메모로 돌아가기',exact:true}).click();assert.match(await editable.innerText(),/retry/);
-  await rm(temp,{recursive:true});await page.locator('.memo-error').getByRole('button',{name:'다시 시도',exact:true}).click();await page.waitForFunction(async id=>JSON.stringify((await window.desktop.memos.get(id)).blocks).includes('retry'),note.id);results.failureRetryAndNavigation=true;
+  await app.evaluate(({ipcMain})=>{ipcMain.removeHandler('memos:save');ipcMain.handle('memos:save',globalThis.originalMemoSave);});await page.locator('.memo-error').getByRole('button',{name:'다시 시도',exact:true}).click();await page.waitForFunction(async id=>JSON.stringify((await window.desktop.memos.get(id)).blocks).includes('retry'),note.id);results.failureRetryAndNavigation=true;
   await page.evaluate(()=>window.desktop.appearance.set('light'));await capture('memo-light');
   // Exercise actual export handlers; only the native path chooser is replaced.
   await app.evaluate(({dialog},out)=>{dialog.showSaveDialog=async(_window,options)=>({canceled:false,filePath:process.getBuiltinModule('path').join(out,options.defaultPath)});},out);
@@ -76,8 +76,8 @@ try {
   await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(900,680));await capture('attached-narrow');
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth),false);results.narrow=true;
   await page.locator('.memo-panel .bn-editor').click();await page.keyboard.press('Control+End');await page.keyboard.type(' close-flush');
-  const closed=app.waitForEvent('close');await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].close());await closed;app=null;
-  const reopened=new Library(path.join(profile,'library'));await reopened.ready;assert.ok(reopened.data.notes.some(n=>n.id===note.id&&n.kind==='memo'));assert.match(JSON.stringify((await new Memos(reopened).read(note.id)).blocks),/retry/);results.reopen=true;
+  const storagePath=(await page.evaluate(()=>window.desktop.getLibrary())).storagePath;const closed=app.waitForEvent('close');await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].close());await closed;app=null;
+  const reopened=new Library(storagePath);await reopened.ready;assert.ok(reopened.data.notes.some(n=>n.id===note.id&&n.kind==='memo'));assert.match(JSON.stringify((await new Memos(reopened).read(note.id)).blocks),/retry/);results.reopen=true;
   assert.match(JSON.stringify((await new Memos(reopened).read(recording.id)).blocks),/close-flush/);results.closeFlush=true;
   assert.deepEqual(errors,[]);results.passed=true;
 }catch(error){results.error=error.stack;process.exitCode=1;if(app){try{const w=await app.firstWindow();await writeFile(path.join(out,'failure-dom.txt'),await w.locator('body').innerText());const img=await app.evaluate(async({BrowserWindow})=>(await BrowserWindow.getAllWindows()[0].webContents.capturePage()).toPNG().toString('base64'));await writeFile(path.join(out,'failure.png'),Buffer.from(img,'base64'));}catch{}}}finally{if(app)await app.close();results.pageErrors=errors;await writeFile(path.join(out,'result.json'),JSON.stringify(results,null,2));console.log(JSON.stringify(results,null,2));}

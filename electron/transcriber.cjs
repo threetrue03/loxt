@@ -344,7 +344,8 @@ class Transcriber {
       this.recordExecution(result, (this.taskLibrary || this.library) === this.library ? 'work' : 'live');
       const store = this.taskLibrary || this.library;
       // Base conversion is committed before optional speaker analysis.
-      result.diarization = { status: 'pending' };
+      result.diarization = { status: store === this.library ? 'disabled' : 'pending' };
+      if (store !== this.library) {
       await store.completeTranscription(id, result);
       this.update({ stage: 'diarizing', message: '화자 분석 중', progress: null });
       try {
@@ -354,6 +355,7 @@ class Transcriber {
         result = { ...result, segments, diarization: { status: 'done' } };
       } catch (error) {
         result = { ...result, diarization: { status: 'failed', error: this.cancelled ? '화자 분석을 취소했습니다.' : friendlyError(error.message) } };
+      }
       }
       this.child = null;
       this.update({ stage: 'saving', message: '스크립트 저장 중', progress: null });
@@ -371,6 +373,7 @@ class Transcriber {
     this.update({ lastExecution });
   }
   async retrySpeakers(id, library = this.library) {
+    if (library === this.library) throw new Error('화자 분석은 Live에서 사용합니다.');
     if (this.busy) throw new Error('현재 작업을 마친 뒤 다시 시도해 주세요.');
     const note = (await library.list()).notes.find(note => note.id === id);
     if (!note?.done || note.deleted) throw new Error('화자를 분석할 스크립트가 없습니다.');

@@ -16,7 +16,7 @@ export default function useLibrarySelection({ visible, enabled, onMove, scope })
     gesture.current = null; setOverlay(null);
   }
   function down(event) {
-    if (!enabled || event.button !== 0 || event.target.closest('input, .inline-name, .note-preview, .more, .folder-card, .table-head, label')) return;
+    if (!enabled || event.button !== 0 || event.target.closest('input, .inline-name, .note-preview, .more, .table-head, label')) return;
     const card = event.target.closest('[data-note-id]');
     if (!card && event.target.closest('button')) return;
     const host = container.current.closest('.main');
@@ -65,7 +65,8 @@ export default function useLibrarySelection({ visible, enabled, onMove, scope })
       setOverlay({ mode: 'area', left, top: clippedTop, width: Math.max(0, right - left), height: Math.max(0, Math.min(innerHeight, bottom) - clippedTop) });
       if (Math.hypot(x - item.x, y - item.y) > 4) suppress.current = true;
     } else if (item.mode === 'drag') {
-      const target = document.elementFromPoint(x, y)?.closest('[data-folder-drop]');
+      let target = document.elementFromPoint(x, y)?.closest('[data-folder-drop]');
+      if (target && target.closest('[data-library-workspace]') && target.closest('[data-library-workspace]').dataset.libraryWorkspace !== container.current.closest('[data-library-workspace]')?.dataset.libraryWorkspace) target = null;
       if (item.target !== target) { item.target?.classList.remove('drop-target'); target?.classList.add('drop-target'); item.target = target; }
       setOverlay({ mode: 'drag', left: x + 14, top: y + 14, count: item.ids.length, title: visible.find(note => note.id === item.id)?.title });
     }
@@ -73,7 +74,8 @@ export default function useLibrarySelection({ visible, enabled, onMove, scope })
   function up(event) {
     const item = gesture.current; if (!item) return;
     if (item.mode === 'drag') {
-      const target = document.elementFromPoint(event.clientX, event.clientY)?.closest('[data-folder-drop]');
+      let target = document.elementFromPoint(event.clientX, event.clientY)?.closest('[data-folder-drop]');
+      if (target && target.closest('[data-library-workspace]') && target.closest('[data-library-workspace]').dataset.libraryWorkspace !== container.current.closest('[data-library-workspace]')?.dataset.libraryWorkspace) target = null;
       if (target && Math.hypot(event.clientX - item.x, event.clientY - item.y) > 5) move.current(item.ids, target.getAttribute('data-folder-drop'));
     }
     cancel();
@@ -106,5 +108,5 @@ export default function useLibrarySelection({ visible, enabled, onMove, scope })
   const visual = overlay ? createPortal(overlay.mode === 'area'
     ? <div className="selection-area" style={overlay} aria-hidden="true"/>
     : <div className="selection-drag" style={{ left: overlay.left, top: overlay.top }} aria-hidden="true">{overlay.count > 1 ? `${overlay.count}개 녹음` : overlay.title}</div>, document.body) : null;
-  return { ids, handlers, visual, open, clear: () => setIds([]) };
+  return { ids, handlers, visual, open, clear: () => setIds([]), selectAll: () => setIds(visible.map(item => item.id)), toggle: (id, checked) => setIds(previous => checked ? [...new Set([...previous,id])] : previous.filter(value => value !== id)) };
 }

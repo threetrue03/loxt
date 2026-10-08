@@ -70,7 +70,7 @@ try {
   await mkdir(indexCollision);
   const base = await page.evaluate(() => window.desktop.getTranscriptionEnvironment());
   await app.evaluate(({ipcMain},base) => { ipcMain.removeHandler('transcription:start'); ipcMain.handle('transcription:start', () => base); },base);
-  await page.getByRole('button', { name: '녹음 중단', exact: true }).click();
+  await page.getByRole('button', { name: '녹음 중단', exact: true }).click();await page.getByRole('button',{name:'변환하기',exact:true}).click();
   await page.getByRole('dialog').getByRole('button', { name: '변환하기', exact: true }).click();
   await page.getByRole('button', { name: '저장 재시도', exact: true }).waitFor();
   await page.getByRole('button', { name: '닫기', exact: true }).click();

@@ -23,7 +23,7 @@ async function directoryUsage(root, seen = new Set()) {
 
 class SettingsSupport {
   constructor(root) { this.root = root; this.cache = null; this.pending = null; }
-  locations() { return { work: path.join(this.root, 'library'), live: path.join(this.root, 'live-library'), models: path.join(this.root, 'transcription', 'models') }; }
+  locations() { return { work: this.libraries?.work.root || path.join(this.root, 'library'), live: this.libraries?.live.root || path.join(this.root, 'live-library'), models: path.join(this.root, 'transcription', 'models') }; }
   async storage(force = false) {
     if (this.pending) return this.pending;
     if (!force && this.cache && Date.now() - this.cache.checkedAt < 15000) return this.cache;

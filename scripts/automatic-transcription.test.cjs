@@ -67,3 +67,9 @@ test('failed automatic preparation returns an actionable error without launching
   assert.match(engine.state.error, /연결/);
   assert.equal(engine.state.task, null);
 });
+
+ test('Work skips auxiliary analysis while Live still analyzes speakers', async t => {
+ const {engine,library,writes}=await fixture(t);let calls=0;engine.auxiliary.prepare=async()=>{calls++;};
+ engine.state.task={id:'work',segments:[]};await engine.transcribe('work','sample.wav');assert.equal(calls,0);assert.equal(writes.at(-1).diarization.status,'disabled');
+ engine.taskLibrary={...library};engine.state.task={id:'live',segments:[]};await engine.transcribe('live','sample.wav');assert.equal(calls,1);assert.equal(writes.at(-1).diarization.status,'done');
+ });

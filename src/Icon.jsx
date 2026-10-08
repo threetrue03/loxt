@@ -1,4 +1,5 @@
 const shapes = {
+  panel: <><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16M6 12h6m-2-2 2 2-2 2"/></>,
   link: <><path d="m10 13 4-4M8 16l-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0m2 1 1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0"/></>,
   close: <path d="m6 6 12 12M18 6 6 18"/>,
   youtube: <><rect x="3" y="5" width="18" height="14" rx="4"/><path d="m10 9 5 3-5 3Z"/></>,

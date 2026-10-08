@@ -65,11 +65,11 @@ try {
   await page.waitForFunction(clock => document.querySelector('[data-workspace="work"] .clock').textContent > clock, clock);
   await page.getByRole('button', { name: 'Work 작업 진행 중', exact: true }).click();
   assert.equal(await page.getByRole('textbox', { name: '녹음 제목', exact: true }).inputValue(), '전환 중 녹음');
-  await page.getByRole('button', { name: '녹음 중단', exact: true }).click(); await page.getByRole('dialog').waitFor();
+  await page.getByRole('button', { name: '녹음 중단', exact: true }).click();await page.getByRole('button',{name:'변환하기',exact:true}).click(); await page.getByRole('dialog').waitFor();
   // Switching while the review dialog is open must close its focus trap, keeping audio paused.
   await switchTo('live'); assert.equal(await page.getByRole('dialog').count(), 0);
   await switchTo('work'); await page.getByRole('button', { name: '녹음 계속', exact: true }).click();
-  await page.getByRole('button', { name: '녹음 중단', exact: true }).click();
+  await page.getByRole('button', { name: '녹음 중단', exact: true }).click();await page.getByRole('button',{name:'변환하기',exact:true}).click();
   await page.getByRole('dialog').getByRole('button', { name: '버리기', exact: true }).click();
   await page.getByRole('heading', { name: '홈', exact: true }).waitFor();
   assert.deepEqual((await page.evaluate(() => window.desktop.getLibrary())).notes.map(item => item.id), [note.id]);

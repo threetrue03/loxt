@@ -85,20 +85,20 @@ try {
     await capture('recording-theme-light.png');
     console.log('PASS theme change via General settings retains active MediaRecorder and increasing timer');
   }
-  await page.getByRole('button',{name:'녹음 중단',exact:true}).click();await page.getByRole('dialog',{name:'변환하기'}).waitFor();assert.equal(await page.getByRole('button',{name:'버리기',exact:true}).count(),1);
+  await page.getByRole('button',{name:'녹음 중단',exact:true}).click();await page.getByRole('button',{name:'변환하기',exact:true}).click();await page.getByRole('dialog',{name:'변환하기'}).waitFor();assert.equal(await page.getByRole('button',{name:'버리기',exact:true}).count(),1);
   const discardBox=await page.getByRole('button',{name:'버리기',exact:true}).boundingBox(), convertBox=await page.getByRole('dialog').getByRole('button',{name:'변환하기',exact:true}).boundingBox(); assert.ok(discardBox.x<convertBox.x);
   const time=await page.locator('.clock').textContent();await page.getByRole('button',{name:'닫기',exact:true}).click();await page.getByRole('button',{name:'홈',exact:true}).click();await page.waitForTimeout(1000);
   await page.getByRole('button',{name:'녹음으로 돌아가기',exact:true}).click();assert.equal(await page.locator('.clock').textContent(),time);
-  assert.ok(await page.getByRole('button',{name:'녹음 중단',exact:true}).isEnabled());await page.getByRole('button',{name:'녹음 계속',exact:true}).click();await page.waitForFunction(previous=>document.querySelector('.clock').textContent.split(':').reduce((total,part)=>total*60+Number(part),0)>previous,time.split(':').reduce((total,part)=>total*60+Number(part),0));
+  assert.ok(await page.getByRole('button',{name:'변환하기',exact:true}).isEnabled());await page.getByRole('button',{name:'녹음 계속',exact:true}).click();await page.waitForFunction(previous=>document.querySelector('.clock').textContent.split(':').reduce((total,part)=>total*60+Number(part),0)>previous,time.split(':').reduce((total,part)=>total*60+Number(part),0));
   const base=await page.evaluate(()=>window.desktop.getTranscriptionEnvironment());
   await app.evaluate(({ipcMain},base)=>{ipcMain.removeHandler('transcription:start');ipcMain.handle('transcription:start',()=>base);},base);
-  await page.getByRole('button',{name:'녹음 중단',exact:true}).click();await capture('paused-conversion.png');
+  await page.getByRole('button',{name:'녹음 중단',exact:true}).click();await page.getByRole('button',{name:'변환하기',exact:true}).click();await capture('paused-conversion.png');
   await page.getByRole('dialog').getByRole('button',{name:'변환하기',exact:true}).click();await page.getByLabel('녹음 제목 변경',{exact:true}).waitFor();
   const finished=await saved(value=>value.notes.some(note=>note.title==='재개 검사'));const note=finished.notes.find(item=>item.title==='재개 검사');
   const audio=await page.evaluate(async id=>{const context=new AudioContext();try{const response=await fetch(`sorinote-audio://recording/${id}`);const buffer=await context.decodeAudioData(await response.arrayBuffer());return {duration:buffer.duration,peak:buffer.getChannelData(0).reduce((max,sample)=>Math.max(max,Math.abs(sample)),0)};}finally{await context.close();}},note.id);
   assert.ok(audio.duration>2&&Math.abs(audio.duration-note.seconds)<1);assert.ok(audio.peak>.01);
   await page.locator('.sidebar-create').click();await page.getByRole('button',{name:'녹음 시작',exact:true}).click();await page.waitForFunction(()=>document.querySelector('.error-message')||document.querySelector('.recording.is-recording'));if(await page.locator('.error-message').count())throw Error(await page.locator('.error-message').innerText());await page.waitForFunction(()=>document.querySelector('.clock').textContent.split(':').reduce((total,part)=>total*60+Number(part),0)>=2);
-  await page.getByRole('button',{name:'녹음 중단',exact:true}).click();await page.getByRole('button',{name:'버리기',exact:true}).click();await page.getByRole('heading',{name:'홈',exact:true}).waitFor();
+  await page.getByRole('button',{name:'녹음 중단',exact:true}).click();await page.getByRole('button',{name:'변환하기',exact:true}).click();await page.getByRole('button',{name:'버리기',exact:true}).click();await page.getByRole('heading',{name:'홈',exact:true}).waitFor();
   const remaining=await page.evaluate(()=>window.desktop.getLibrary());assert.equal(remaining.notes.length,4);assert.equal(await page.locator('.background-recording').count(),0);
   await page.waitForTimeout(2600);assert.equal(await page.locator('.toast').count(),0);
   await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(860,640));await capture('small-header.png');

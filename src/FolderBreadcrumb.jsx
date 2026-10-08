@@ -14,7 +14,7 @@ export default function FolderBreadcrumb({ folder, parents, onOpen, editing, onR
   const root = useRef(null), measure = useRef(null);
   const [collapsed, setCollapsed] = useState(false);
   useEffect(() => {
-    const update = () => setCollapsed(measure.current.getBoundingClientRect().width > root.current.clientWidth - 16);
+    const update = () => { if (measure.current && root.current) setCollapsed(measure.current.getBoundingClientRect().width > root.current.clientWidth - 16); };
     const observer = new ResizeObserver(update);
     observer.observe(root.current); observer.observe(measure.current); update();
     let active = true;

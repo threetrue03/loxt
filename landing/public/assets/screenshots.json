@@ -1,10 +1,16 @@
 {
-  "version": "1.13.0",
+  "version": "1.15.0",
   "examples": true,
   "liveInference": false,
   "exampleAudio": "silent WAV and scripted transcript/speaker data; not accuracy or speed measurements",
-  "capturedAt": "2026-10-05T03:28:18.391Z",
+  "capturedAt": "2026-10-08T05:03:36.295Z",
   "images": [
+    {
+      "file": "sidebar-collapsed-work.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "work-sidebar-collapsed"
+    },
     {
       "file": "workspace.png",
       "width": 1783,
@@ -15,13 +21,19 @@
       "file": "library.png",
       "width": 1783,
       "height": 1079,
-      "scenario": "work-library"
+      "scenario": "work-folder-library"
     },
     {
       "file": "script.png",
       "width": 1783,
       "height": 1079,
-      "scenario": "speaker-script"
+      "scenario": "work-script"
+    },
+    {
+      "file": "script-export.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "script-txt-pdf-export-menu"
     },
     {
       "file": "recording-memo.png",
@@ -54,6 +66,12 @@
       "scenario": "trash-selection"
     },
     {
+      "file": "work-recording-memo.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "work-recording-with-memo-fake-microphone"
+    },
+    {
       "file": "conversion.png",
       "width": 1783,
       "height": 1079,
@@ -70,6 +88,12 @@
       "width": 1783,
       "height": 1079,
       "scenario": "model-library"
+    },
+    {
+      "file": "storage.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "storage-location-settings"
     },
     {
       "file": "youtube.png",
@@ -93,7 +117,7 @@
       "file": "light-script.png",
       "width": 1783,
       "height": 1079,
-      "scenario": "speaker-script-light"
+      "scenario": "work-script-light"
     },
     {
       "file": "light-recording-memo.png",
@@ -114,16 +138,34 @@
       "scenario": "work-home"
     },
     {
+      "file": "folder-tabs.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "work-home-folder-panel"
+    },
+    {
       "file": "live-home.png",
       "width": 1783,
       "height": 1079,
       "scenario": "live-home"
     },
     {
+      "file": "sidebar-collapsed-live.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "live-sidebar-collapsed"
+    },
+    {
       "file": "live.png",
       "width": 1783,
       "height": 1079,
       "scenario": "live-scripted-example"
+    },
+    {
+      "file": "live-memo.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "live-scripted-example-with-memo"
     }
   ]
 }

@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import Icon from './Icon.jsx';
 import Menu from './Menu.jsx';
 import ConversionDialog from './ConversionDialog.jsx';
+import MemoHost from './MemoHost.jsx';
+import ResizableDocuments from './ResizableDocuments.jsx';
+import { saveMemo } from './memoStore.js';
+import './memo.css';
 import { formatRecordingTime } from './data.js';
 import { openLiveInput } from './liveCapture.js';
 
@@ -24,6 +28,8 @@ export default function RecordingPage({ workspaceActive = true, folderParents, f
   const [outputStatus, setOutputStatus] = useState('');
   const [stored, setStored] = useState(null);
   const [review, setReview] = useState(false);
+  const [conversionReady, setConversionReady] = useState(false);
+  const [memoId, setMemoId] = useState(null), [memoOpen, setMemoOpen] = useState(false);
   useEffect(() => { if (!workspaceActive) setReview(false); }, [workspaceActive]);
   const recorder = useRef(null);
   const stream = useRef(null);
@@ -111,6 +117,7 @@ export default function RecordingPage({ workspaceActive = true, folderParents, f
   async function save() {
     changeState('saving');
     try {
+      if (session.current) await saveMemo(session.current);
       await flushChunks();
       // ondataavailable의 마지막 조각까지 받은 후에만 파일과 목록을 확정합니다.
       if (pending.current.length) await flushChunks();
@@ -137,7 +144,7 @@ export default function RecordingPage({ workspaceActive = true, folderParents, f
 
   async function start() {
     if (!window.desktop) { setError('데스크톱 앱에서 녹음할 수 있습니다.'); return; }
-    changeState('starting'); setError(''); callbacks.current.onBusy(true);
+    changeState('starting'); setError(''); setConversionReady(false); callbacks.current.onBusy(true);
     try {
       const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'].find(type => MediaRecorder.isTypeSupported(type));
       if (!mime) throw new Error('녹음 형식을 지원하지 않습니다.');
@@ -148,7 +155,7 @@ export default function RecordingPage({ workspaceActive = true, folderParents, f
         if (event.type === 'reconnecting') setOutputStatus('출력 장치 다시 연결 중…');
       });
       const result = await window.desktop.beginRecording({ title: title.trim() || '새 녹음', folder, mime: mime.split(';')[0] });
-      session.current = result.id; pending.current = []; sequence.current = 0; elapsed.current = 0;
+      session.current = result.id; setMemoId(result.id); pending.current = []; sequence.current = 0; elapsed.current = 0;
       recorder.current = new MediaRecorder(stream.current, { mimeType: mime, audioBitsPerSecond: 128000 });
       recorder.current.ondataavailable = event => {
         if (!event.data.size) return;
@@ -181,12 +188,16 @@ export default function RecordingPage({ workspaceActive = true, folderParents, f
       elapsed.current += performance.now() - startedAt.current;
       recorder.current.pause(); setSeconds(elapsed.current / 1000); setLevel(0); changeState('paused');
     } else {
-      recorder.current.resume(); startedAt.current = performance.now(); changeState('recording');
+      recorder.current.resume(); startedAt.current = performance.now(); setConversionReady(false); changeState('recording');
     }
   }
   function stopForReview() {
-    if (status.current === 'recording') pause();
-    setReview(true);
+    if (status.current === 'recording' || (status.current === 'paused' && !conversionReady)) {
+      if (status.current === 'recording') pause();
+      setConversionReady(true);
+      return;
+    }
+    if (status.current === 'paused' || status.current === 'stopped') setReview(true);
   }
   async function convert(options) {
     const result = stored || await new Promise((resolve, reject) => {
@@ -208,6 +219,8 @@ export default function RecordingPage({ workspaceActive = true, folderParents, f
     releaseMicrophone();
     try {
       await pump.current?.catch(() => {});
+      if (memoId) await saveMemo(memoId);
+      setMemoOpen(false);
       const library = await window.desktop.discardRecording(id);
       pending.current = []; session.current = null; callbacks.current.onBusy(false);
       onDiscard(library);
@@ -227,19 +240,18 @@ export default function RecordingPage({ workspaceActive = true, folderParents, f
   const active = !['ready', 'stopped'].includes(state);
   const statusText = { ready: '녹음 준비', starting: '마이크 연결 중', recording: '녹음 중 · 원본 자동 저장', paused: '일시정지됨', saving: '원본 저장 중', stopped: '원본 저장 완료', 'save-error': '저장 실패' }[state];
   return <section className="content workspace recording-workspace">
-    <button className="back" onClick={onBack}>← 녹음 목록</button>
-    <div className="heading workspace-heading"><div className="workspace-title detail-title"><input className="recording-title" aria-label="녹음 제목" value={title} maxLength={120} onChange={event => setTitle(event.target.value)} onBlur={() => { if (!title.trim()) setTitle('새 녹음'); }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); }}/></div></div>
+    <div className="heading workspace-heading"><button className="back" onClick={onBack}>← 녹음 목록</button><div className="workspace-title detail-title"><input className="recording-title" aria-label="녹음 제목" value={title} maxLength={120} onChange={event => setTitle(event.target.value)} onBlur={() => { if (!title.trim()) setTitle('새 녹음'); }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); }}/></div></div>
     {error ? <p className="error-message" role="alert">{error}</p> : null}
-    <div className="transcript-frame"><div className="detail-tabs">스크립트</div><div className="transcript" role="region" aria-label="스크립트" tabIndex="0"><div className="empty">{stored ? '저장할 폴더와 모델을 선택하면 변환을 시작합니다.' : '녹음을 중단하면 음성을 스크립트로 변환합니다.'}</div></div></div>
+    <ResizableDocuments open={memoOpen}><div className="transcript-frame"><div className="detail-tabs"><span>스크립트</span><div className="script-actions"><button className="script-export" aria-label="메모 열기" aria-expanded={memoOpen} disabled={!memoId || state === 'discarding'} onClick={() => setMemoOpen(value => !value)}><Icon name="file"/>메모</button></div></div><div className="transcript" role="region" aria-label="스크립트" tabIndex="0"><div className="empty">{stored ? '저장할 폴더와 모델을 선택하면 변환을 시작합니다.' : '녹음을 중단한 뒤 변환하기를 눌러 음성을 스크립트로 변환합니다.'}</div></div></div><aside className="memo-panel" aria-label="녹음 메모" inert={!memoOpen || undefined}>{memoId ? <MemoHost id={memoId} title={title + ' 메모'} compact onClose={() => setMemoOpen(false)}/> : null}</aside></ResizableDocuments>
     <div className="bottom-controls">
     <div className={`recording ${state === 'recording' ? 'is-recording' : state === 'paused' ? 'is-paused' : ''}`}>
-      {state !== 'ready' ? <div className="record-state" role="status">{statusText}{outputStatus ? ` · ${outputStatus}` : ''}</div> : null}
+      {state !== 'ready' ? <div className="record-state" role="status">{statusText}</div> : null}
       <div className="wave" aria-hidden="true">{Array.from({ length: 12 }, (_, i) => <i key={i} style={{ height: 4 + level * (20 + Math.sin(i * 1.3) * 10) }}/>)}</div>
-      <div className="clock">{formatRecordingTime(seconds)}</div>
+      <span className="record-device" title={device === '__system__' ? outputStatus || '컴퓨터 소리' : device ? devices.find(item => item.deviceId === device) ? devices.find(item => item.deviceId === device).label || '선택한 마이크' : '선택 장치 · 연결되지 않음' : '시스템 기본 마이크'}>{device === '__system__' ? outputStatus || '컴퓨터 소리' : device ? devices.find(item => item.deviceId === device) ? devices.find(item => item.deviceId === device).label || '선택한 마이크' : '선택 장치 · 연결되지 않음' : '시스템 기본 마이크'}</span><div className="clock">{formatRecordingTime(seconds)}</div>
       <div className="record-actions">
         {state === 'save-error' ? <><button className="secondary" onClick={keepPartial}>저장된 부분 보관</button><button className="primary" onClick={save}>저장 재시도</button></> : <>
           <button className="secondary" disabled={!['recording', 'paused'].includes(state)} onClick={pause}><Icon name={state === 'paused' ? 'play' : 'pause'}/><span>{state === 'paused' ? '녹음 계속' : '일시정지'}</span></button>
-          <div className="record-start-group"><button className="primary" disabled={['starting', 'saving', 'discarding'].includes(state) || !window.desktop} onClick={state === 'ready' ? start : stopForReview}>{state === 'ready' ? <><Icon name="mic"/>녹음 시작</> : state === 'saving' ? '저장 중…' : state === 'starting' ? '연결 중…' : state === 'stopped' ? '변환하기' : <><Icon name="stop"/>녹음 중단</>}</button><Menu label="녹음 장치 선택" trigger={<Icon name="chevronDown"/>} className="microphone-menu" upward disabled={active || Boolean(stored)}>{close => [{ deviceId: '', label: '시스템 기본 마이크' }, { deviceId: '__system__', label: '컴퓨터 소리' }, ...devices].map((item, index) => <button role="menuitemradio" aria-checked={device === item.deviceId} key={item.deviceId} onClick={() => { setDevice(item.deviceId); close(); }}><Icon name={item.deviceId === '__system__' ? 'speaker' : 'mic'}/><span>{item.label || `마이크 ${index}`}</span>{device === item.deviceId ? <span>✓</span> : null}</button>)}</Menu></div>
+          <div className="record-start-group"><button className="primary" disabled={['starting', 'saving', 'discarding'].includes(state) || !window.desktop} onClick={state === 'ready' ? start : stopForReview}>{state === 'ready' ? <><Icon name="mic"/>녹음 시작</> : state === 'saving' ? '저장 중…' : state === 'starting' ? '연결 중…' : state === 'stopped' || conversionReady ? '변환하기' : <><Icon name="stop"/>녹음 중단</>}</button><Menu label="녹음 장치 선택" trigger={<Icon name="chevronDown"/>} className="microphone-menu" upward disabled={active || Boolean(stored)}>{close => [{ deviceId: '', label: '시스템 기본 마이크' }, { deviceId: '__system__', label: '컴퓨터 소리' }, ...devices].map((item, index) => <button role="menuitemradio" aria-checked={device === item.deviceId} key={item.deviceId} onClick={() => { setDevice(item.deviceId); close(); }}><Icon name={item.deviceId === '__system__' ? 'speaker' : 'mic'}/><span>{item.label || `마이크 ${index}`}</span>{device === item.deviceId ? <span>✓</span> : null}</button>)}</Menu></div>
         </>}
       </div>
     </div>

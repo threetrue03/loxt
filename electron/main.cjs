@@ -15,6 +15,10 @@ const { Appearance } = require('./appearance.cjs');
 const { WorkspacePreferences } = require('./workspace-preferences.cjs');
 const { SettingsSupport, diagnosticInfo } = require('./settings-support.cjs');
 const { ModelActions } = require('./model-actions.cjs');
+const { LibraryLocation } = require('./library-location.cjs');
+const { LibraryActions } = require('./library-actions.cjs');
+const { BrowserTabs } = require('./browser-tabs.cjs');
+let libraryLocation, libraryActions, browserTabs, relocating = false;
 
 nativeTheme.themeSource = 'dark';
 // Keep the existing library and models through the LOXT display-name migration.
@@ -117,6 +121,7 @@ function createWindow() {
     callback(microphoneAllowed);
   });
   mainWindow.on('close', async event => {
+    if (relocating) { event.preventDefault(); return; }
     const changingData = youtube?.hasJobs || (live?.busy && live.state.stage !== 'ready') || conversions?.hasJobs || transcriber?.requestId || (transcriber?.busy && !['detect', 'live'].includes(transcriber.operation));
     if (!library?.sessions.size && !workspaceLibraries?.live.sessions.size && !changingData) {
       if (memoCloseAllowed || !memoPending) return;
@@ -128,7 +133,7 @@ function createWindow() {
           memoFlushReply = value => { if (value?.token !== token) return; clearTimeout(timeout); memoFlushReply = null; value.error ? reject(new Error(value.error)) : resolve(); };
           mainWindow.webContents.send('memos:flush', token);
         });
-        await library.queue; memoCloseAllowed = true; mainWindow.close();
+        await Promise.all([library.queue, workspaceLibraries.live.queue]); memoCloseAllowed = true; mainWindow.close();
       } catch (error) { await dialog.showMessageBox(mainWindow, { type: 'error', title: '메모 저장 실패', message: error.message, detail: '작성 내용을 유지했습니다. 메모에서 다시 시도한 뒤 닫아 주세요.', buttons: ['돌아가기'] }); }
       finally { memoClosing = false; }
       return;
@@ -152,6 +157,7 @@ ipcMain.handle('app:info', (event) => {
 function handle(channel, work) {
   ipcMain.handle(channel, (event, payload) => {
     if (!isTrusted(event.senderFrame)) throw new Error('허용되지 않은 요청입니다.');
+    if (relocating && !['browser:command', 'appearance:get', 'preferences:get'].includes(channel)) throw new Error('보관함 이전 중입니다. 완료 후 다시 시도해 주세요.');
     return work(payload);
   });
 }
@@ -233,16 +239,58 @@ handle('transcription:import-model', async () => {
   });
 });
 handle('library:list', () => library.list());
-handle('memos:create', folder => memos.create(folder || ''));
-handle('memos:get', id => memos.read(id));
-handle('memos:save', payload => memos.save(payload));
-handle('memos:attach', payload => memos.attach(payload));
+handle('browser:command', payload => browserTabs?.command(payload));
+handle('library:manage', async payload => {
+  const store = workspaceLibraries.get(payload?.workspace);
+  if (pendingMemoIds.size) throw new Error('메모 저장을 마친 뒤 기록을 변경해 주세요.');
+  if (live?.busy && (payload.ids?.includes(live.state.id) || payload.folders?.some(f => live.state.folder === f || live.state.folder?.startsWith(f + '/')))) throw new Error('Live 녹음을 종료한 뒤 기록을 변경해 주세요.');
+  return libraryActions[payload.workspace].run(payload);
+});
+handle('library:search', async payload => {
+  const store = workspaceLibraries.get(payload?.workspace), data = await store.list();
+  if (typeof payload.query !== 'string' || payload.query.length > 500 || !['title', 'content', 'both'].includes(payload.field)) throw new Error('검색 조건을 확인해 주세요.');
+  const q = payload.query.toLocaleLowerCase('ko'); const matches = [];
+  for (const note of data.notes.filter(n => !n.deleted && n.folder === (payload.folder || ''))) {
+    if (payload.field !== 'content' && note.title.toLocaleLowerCase('ko').includes(q)) { matches.push(note.id); continue; }
+    if (payload.field !== 'title') {
+      let text = note.segments.map(s => s.text).join(' ');
+      if (note.kind === 'memo' || note.hasMemo) {
+        const doc = await new Memos(store).read(note.id); const parts = []; const walk = value => { if (typeof value?.text === 'string') parts.push(value.text); if (value && typeof value === 'object') Object.values(value).forEach(v => { if (v && typeof v === 'object') walk(v); }); }; walk(doc.blocks); text += ' ' + parts.join(' ');
+      }
+      if (text.toLocaleLowerCase('ko').includes(q)) matches.push(note.id);
+    }
+  }
+  return matches;
+});
+handle('settings:library-root', () => ({ root: libraryLocation.root, changing: relocating }));
+handle('settings:move-library', async () => {
+  requireNoConversions(); if (pendingMemoIds.size || library.sessions.size || workspaceLibraries.live.sessions.size || youtube?.hasJobs) throw new Error('녹음·메모 저장·변환을 마친 뒤 저장 위치를 변경해 주세요.');
+  const chosen = await dialog.showOpenDialog(mainWindow, { title: 'LOXT 보관함 저장 위치', properties: ['openDirectory', 'createDirectory'] });
+  if (chosen.canceled) return { canceled: true };
+  requireNoConversions(); if (pendingMemoIds.size || library.sessions.size || workspaceLibraries.live.sessions.size || youtube?.hasJobs || relocating) throw new Error('작업을 마친 뒤 저장 위치를 변경해 주세요.');
+  relocating = true;
+  try {
+    await library.enqueue(() => workspaceLibraries.live.enqueue(() => libraryLocation.change(chosen.filePaths[0], { work: library, live: workspaceLibraries.live })));
+    settingsSupport.cache = null;
+    return { root: libraryLocation.root };
+  } finally { relocating = false; }
+});
+function memoFor(id) {
+  const stores = ['work', 'live'].map(mode => workspaceLibraries.get(mode)).filter(store => store.data.notes.some(note => note.id === id) || store.sessions.has(id));
+  if (stores.length !== 1) throw new Error('메모의 보관함을 확인해 주세요.');
+  return new Memos(stores[0]);
+}
+handle('memos:create', value => (value && typeof value === 'object' ? new Memos(workspaceLibraries.get(value.workspace)).create(value.folder || '') : memos.create(value || '')));
+handle('library:export-folder', payload => require('./folder-export.cjs').exportFolder(payload, {library:workspaceLibraries.get(payload?.workspace), dialog, mainWindow}));
+handle('memos:get', id => memoFor(id).read(id));
+handle('memos:save', payload => memoFor(payload?.id).save(payload));
+handle('memos:attach', payload => memoFor(payload?.id).attach(payload));
 handle('memos:copy', async text => { if (typeof text !== 'string' || text.length > 5_000_000) throw new Error('복사할 내용을 확인해 주세요.'); await clipboard.writeText(text); return true; });
-handle('memos:export', payload => exportMemo(payload, { memos, dialog, BrowserWindow, mainWindow }));
+handle('memos:export', payload => exportMemo(payload, { memos: memoFor(payload?.id), dialog, BrowserWindow, mainWindow }));
 handle('memos:link', async payload => {
   const url = typeof payload === 'string' ? payload : payload?.url;
   if (typeof url !== 'string' || url.length > 4000) throw new Error('주소를 확인해 주세요.');
-  if (url.startsWith('loxt-asset:')) { const asset = await memos.asset(url); const name = typeof payload?.name === 'string' ? payload.name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').trim().slice(0, 120) : ''; const result = await dialog.showSaveDialog(mainWindow, { title: '첨부파일 저장', defaultPath: name || asset.name }); if (!result.canceled && result.filePath) await require('node:fs/promises').copyFile(asset.filename, result.filePath); }
+  if (url.startsWith('loxt-asset:')) { const asset = await memoFor(new URL(url).pathname.split('/')[1]).asset(url); const name = typeof payload?.name === 'string' ? payload.name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').trim().slice(0, 120) : ''; const result = await dialog.showSaveDialog(mainWindow, { title: '첨부파일 저장', defaultPath: name || asset.name }); if (!result.canceled && result.filePath) await require('node:fs/promises').copyFile(asset.filename, result.filePath); }
   else if (/^https?:\/\//i.test(url) || /^mailto:/i.test(url)) await shell.openExternal(url);
   else throw new Error('웹 주소 또는 이메일 링크만 열 수 있습니다.');
 });
@@ -374,24 +422,37 @@ ipcMain.handle('transcript:export', async (event, payload) => {
     || payload.title.length > 300 || payload.text.length > 5_000_000) {
     throw new Error('내보내기 데이터가 올바르지 않습니다.');
   }
+  const format = payload.format || 'txt';
+  if (!['txt','pdf'].includes(format)) throw new Error('내보내기 형식을 확인해 주세요.');
   const filename = payload.title.replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').slice(0, 120) || '스크립트';
   const result = await dialog.showSaveDialog(mainWindow, {
-    title: '스크립트 저장', defaultPath: `${filename}.txt`,
-    filters: [{ name: '텍스트 파일', extensions: ['txt'] }],
+    title: '스크립트 저장', defaultPath: `${filename}.${format}`,
+    filters: [{ name: format === 'pdf' ? 'PDF' : '텍스트 파일', extensions: [format] }],
   });
   if (result.canceled || !result.filePath) return { canceled: true };
-  await writeFile(result.filePath, '\ufeff' + payload.text, 'utf8');
+  if (format === 'pdf') {
+    const escape = value => value.replace(/[&<>]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[char]));
+    const html = await require('./memo-export.cjs').documentHTML({id:'', title:payload.title, html:'<p>' + escape(payload.text).replace(/\n/g, '<br>') + '</p>'}, null);
+    await require('./pdf-export.cjs').printPDF(html, result.filePath, BrowserWindow);
+  } else await writeFile(result.filePath, '\ufeff' + payload.text, 'utf8');
   return { canceled: false };
 });
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   if (!singleton) return;
   appearance = new Appearance(path.join(app.getPath('userData'), 'appearance.json'));
   preferences = new WorkspacePreferences(app.getPath('userData'), value => mainWindow?.webContents.send('preferences:changed', value));
   settingsSupport = new SettingsSupport(app.getPath('userData'));
   modelActions = new ModelActions(app.getPath('userData'), publishSettings);
   nativeTheme.themeSource = appearance.theme;
-  workspaceLibraries = new WorkspaceLibraries(app.getPath('userData'));
+  libraryLocation = new LibraryLocation(app.getPath('userData'), process.env.SORINOTE_TEST === '1' ? path.join(app.getPath('userData'), 'LOXT') : path.join(app.getPath('appData'), 'LOXT'));
+  let root;
+  try { root = await libraryLocation.initialize(); }
+  catch (error) { await dialog.showMessageBox({ type: 'error', title: '보관함 이전 보류', message: error.message, detail: '기존 데이터는 그대로 유지합니다. 기존 보관함으로 시작합니다.' }); root = app.getPath('userData'); libraryLocation.root = root; }
+  workspaceLibraries = new WorkspaceLibraries(app.getPath('userData'), root, root !== app.getPath('userData'));
+  await Promise.all([workspaceLibraries.work.ready, workspaceLibraries.live.ready]);
+  settingsSupport.libraries = workspaceLibraries;
+  libraryActions = { work: new LibraryActions(workspaceLibraries.work), live: new LibraryActions(workspaceLibraries.live) };
   library = workspaceLibraries.get('work');
   memos = new Memos(library);
   // 실패는 library:list에서 화면에 안내합니다. 초기화 실패로 원본을 덮어쓰지 않습니다.
@@ -419,10 +480,11 @@ app.whenReady().then(() => {
   live.notifyPatch = patch => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('live:patch', patch); };
   protocol.handle('sorinote-audio', audioResponse);
   protocol.handle('loxt-asset', async request => {
-    try { const asset = await memos.asset(request.url); return new Response(request.method === 'HEAD' ? null : Readable.toWeb(createReadStream(asset.filename)), { headers: { 'Content-Type': asset.mime, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Access-Control-Allow-Origin': developmentUrl || 'null' } }); }
+    try { const asset = await memoFor(new URL(request.url).pathname.split('/')[1]).asset(request.url); return new Response(request.method === 'HEAD' ? null : Readable.toWeb(createReadStream(asset.filename)), { headers: { 'Content-Type': asset.mime, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Access-Control-Allow-Origin': developmentUrl || 'null' } }); }
     catch { return new Response(null, { status: 404 }); }
   });
   createWindow();
+  browserTabs = new BrowserTabs(mainWindow);
 });
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });

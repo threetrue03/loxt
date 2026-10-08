@@ -1,0 +1,34 @@
+const test = require('node:test'), assert = require('node:assert/strict');
+const fs = require('node:fs/promises'), path = require('node:path');
+const { Library } = require('../electron/library.cjs');
+const { Memos } = require('../electron/memos.cjs');
+const { exportFolder, folderSnapshot } = require('../electron/folder-export.cjs');
+const unzipper = require('unzipper');
+test('folder ZIP preserves descendants, audio, script, Markdown and referenced attachments; omits trash and other folders', async () => {
+  await fs.mkdir('test-results', {recursive:true});
+  const root = await fs.mkdtemp(path.resolve('test-results/folder-export-')), library = new Library(path.join(root,'library')); await library.ready;
+  await library.createFolder('회의'); await library.createFolder({name:'안쪽',parent:'회의'}); await library.createFolder({name:'빈 폴더',parent:'회의'}); await library.createFolder('다른 폴더');
+  const source = path.join(root,'sample.wav'); await fs.writeFile(source, Buffer.from('original-audio-fixture'));
+  const note = (await library.importAudio(source,'회의/안쪽')).note;
+  await library.completeTranscription(note.id,{seconds:2,segments:[{start:0,end:1,text:'한글 스크립트'}]});
+  const memos = new Memos(library), memo = (await memos.create('회의')).note;
+  const url = await memos.attach({id:memo.id,name:'자료.txt',bytes:Buffer.from('attachment-fixture')});
+  await memos.save({id:memo.id,revision:0,blocks:[{id:'text',type:'checkListItem',props:{checked:true},content:[{type:'text',text:'할 일',styles:{bold:true}}],children:[]},{id:'file',type:'file',props:{name:'자료.txt',url},content:[],children:[]}]});
+  await memos.create('다른 폴더'); const trashed = (await memos.create('회의')).note; await library.updateNote(trashed.id,{deleted:true});
+  const before = JSON.stringify(library.data), destination = path.join(root,'archive.zip');
+  await exportFolder({folder:'회의'}, {library,dialog:{showSaveDialog:async()=>({filePath:destination})}});
+  const archive = await unzipper.Open.file(destination), paths = archive.files.map(file=>file.path);
+  assert.ok(paths.includes('회의/빈 폴더/')); assert.ok(paths.includes('회의/안쪽/'));
+  assert.equal(paths.some(name=>name.includes(trashed.id)||name.includes('다른 폴더')),false);
+  const original = archive.files.find(file=>file.path.endsWith('원본.wav')); assert.equal((await original.buffer()).toString(),'original-audio-fixture');
+  assert.match((await archive.files.find(file=>file.path.endsWith('스크립트.txt')).buffer()).toString(),/한글 스크립트/);
+  const md = (await archive.files.find(file=>file.path.endsWith('메모.md')).buffer()).toString(); assert.match(md,/- \[x\] \*\*할 일\*\*/); assert.equal(md.includes('loxt-asset:'),false);
+  assert.equal((await archive.files.find(file=>file.path.includes('첨부파일/')).buffer()).toString(),'attachment-fixture'); assert.equal(JSON.stringify(library.data),before);
+  const active = await library.beginRecording({title:'진행 중',folder:'회의',mime:'audio/webm'});
+  await assert.rejects(folderSnapshot(library,'회의'),/녹음을 종료/); await library.discardRecording(active.id);
+  await fs.writeFile(destination,'keep-destination');
+  await fs.unlink((await library.getAudio(note.id)).filename);
+  await assert.rejects(exportFolder({folder:'회의'}, {library,dialog:{showSaveDialog:async()=>({filePath:destination})}})); assert.equal(await fs.readFile(destination,'utf8'),'keep-destination');
+  assert.equal((await fs.readdir(root)).some(name=>name.endsWith('.part')),false);
+});
+

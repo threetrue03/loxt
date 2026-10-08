@@ -41,7 +41,7 @@ class Memos {
   constructor(library) { this.library = library; }
   note(id, editable = false) {
     if (!ID.test(id || '')) throw new Error('메모를 찾지 못했습니다.');
-    const note = this.library.data.notes.find(n => n.id === id);
+    const note = this.library.data.notes.find(n => n.id === id) || this.library.sessions.get(id)?.note;
     if (!note || (editable && note.deleted)) throw new Error('메모가 삭제되었거나 존재하지 않습니다.');
     return note;
   }

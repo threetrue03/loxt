@@ -114,7 +114,7 @@ try {
   await page.waitForFunction(() => document.querySelector('.clock').textContent >= '00:06', undefined, { polling: 100 });
   await page.getByRole('button', { name: '녹음으로 돌아가기', exact: true }).click();
   assert.ok(await page.locator('.clock:visible').textContent() >= '00:06');
-  await page.getByRole('button', { name: '녹음 중단', exact: true }).click();
+  await page.getByRole('button', { name: '녹음 중단', exact: true }).click();await page.getByRole('button',{name:'변환하기',exact:true}).click();
   await page.getByLabel('변환 모델', { exact: true }).selectOption('small');
   await page.getByRole('dialog').getByRole('button', { name: '변환하기', exact: true }).click();
   await page.getByRole('textbox', { name: '녹음 제목 변경', exact: true }).waitFor();

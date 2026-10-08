@@ -14,8 +14,17 @@ else {
 }
 
 contextBridge.exposeInMainWorld('desktop', Object.freeze({
+  browser: Object.freeze({
+    command: payload => ipcRenderer.invoke('browser:command', payload),
+    onState: callback => { const listener = (_event, value) => callback(value); ipcRenderer.on('browser:state', listener); return () => ipcRenderer.removeListener('browser:state', listener); },
+    onNewTab: callback => { const listener = (_event, value) => callback(value); ipcRenderer.on('browser:new-tab', listener); return () => ipcRenderer.removeListener('browser:new-tab', listener); },
+    onCloseTab: callback => { const listener = () => callback(); ipcRenderer.on('browser:close-tab', listener); return () => ipcRenderer.removeListener('browser:close-tab', listener); },
+    onShortcut: callback => { const listener = (_event, value) => callback(value); ipcRenderer.on('browser:shortcut', listener); return () => ipcRenderer.removeListener('browser:shortcut', listener); },
+  }),
+  manageLibrary: payload => ipcRenderer.invoke('library:manage', payload),
+  searchLibrary: payload => ipcRenderer.invoke('library:search', payload),
   memos: Object.freeze({
-    create: folder => ipcRenderer.invoke('memos:create', folder), get: id => ipcRenderer.invoke('memos:get', id),
+    create: (folder, workspace = 'work') => ipcRenderer.invoke('memos:create', { folder, workspace }), get: id => ipcRenderer.invoke('memos:get', id),
     save: payload => ipcRenderer.invoke('memos:save', payload), attach: payload => ipcRenderer.invoke('memos:attach', payload),
     export: payload => ipcRenderer.invoke('memos:export', payload), openLink: url => ipcRenderer.invoke('memos:link', url),
     copy: text => ipcRenderer.invoke('memos:copy', text),
@@ -28,6 +37,7 @@ contextBridge.exposeInMainWorld('desktop', Object.freeze({
     onChange: callback => { const listener = (_event, state) => callback(state); ipcRenderer.on('preferences:changed', listener); return () => ipcRenderer.removeListener('preferences:changed', listener); },
   }),
   settings: Object.freeze({
+    libraryRoot: () => ipcRenderer.invoke('settings:library-root'), moveLibrary: () => ipcRenderer.invoke('settings:move-library'),
     get: () => ipcRenderer.invoke('settings:state'), storage: force => ipcRenderer.invoke('settings:storage', force), verify: model => ipcRenderer.invoke('settings:verify', model),
     location: (id, copy = false) => ipcRenderer.invoke('settings:location', { id, copy }),
     log: () => ipcRenderer.invoke('settings:log'), diagnostics: () => ipcRenderer.invoke('settings:diagnostics'), link: id => ipcRenderer.invoke('settings:link', id),
@@ -93,6 +103,7 @@ contextBridge.exposeInMainWorld('desktop', Object.freeze({
   finishRecording: (payload) => ipcRenderer.invoke('recording:finish', payload),
   abandonRecording: (id) => ipcRenderer.invoke('recording:abandon', id),
   importAudio: (folder) => ipcRenderer.invoke('audio:import', { folder }),
+  exportFolder: payload => ipcRenderer.invoke('library:export-folder', payload),
   exportTranscript: (payload) => ipcRenderer.invoke('transcript:export', payload),
   getTranscriptionEnvironment: () => ipcRenderer.invoke('transcription:environment'),
   prepareTranscription: () => ipcRenderer.invoke('transcription:prepare'),

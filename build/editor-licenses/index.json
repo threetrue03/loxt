@@ -384,6 +384,15 @@
     ]
   },
   {
+    "name": "buffer-crc32",
+    "version": "1.0.0",
+    "license": "MIT",
+    "source": "git://github.com/brianloveswords/buffer-crc32.git",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
     "name": "ccount",
     "version": "2.0.1",
     "license": "MIT",
@@ -1194,6 +1203,15 @@
     "version": "2.2.8",
     "license": "MIT",
     "source": "git+https://github.com/marijnh/w3c-keyname.git",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "yazl",
+    "version": "3.3.1",
+    "license": "MIT",
+    "source": "git+https://github.com/thejoshwolfe/yazl.git",
     "files": [
       "LICENSE"
     ]

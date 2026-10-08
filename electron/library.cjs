@@ -394,7 +394,7 @@ class Library {
       if (!session || !session.bytes) throw new Error('저장할 녹음 데이터가 없습니다.');
       const seconds = session.note.mime === 'audio/wav' ? session.bytes / 32000 : payload.seconds;
       if (!Number.isFinite(seconds) || seconds < 0 || seconds > 7 * 24 * 3600) throw new Error('녹음 시간이 올바르지 않습니다.');
-      const note = { ...session.note, seconds, duration: duration(seconds), status: 'ready' };
+      const note = { ...session.note, ...this.data.notes.find(item => item.id === payload.id), seconds, duration: duration(seconds), status: 'ready' };
       const directory = path.join(this.recordings, note.id);
       if (!session.closed) { if (note.mime === 'audio/wav') await session.handle.write(waveHeader(session.bytes), 0, 44, 0); await session.handle.sync(); await session.handle.close(); session.closed = true; }
       const partial = path.join(directory, note.audioFile + '.part');
@@ -408,6 +408,7 @@ class Library {
     return this.enqueue(async () => {
       const session = this.sessions.get(payload?.id);
       if (!session || session.closed) return;
+      session.note = { ...session.note, ...this.data.notes.find(item => item.id === payload.id) };
       if (Number.isFinite(payload.seconds) && payload.seconds >= 0) {
         session.note.seconds = payload.seconds;
         session.note.duration = duration(payload.seconds);
@@ -422,7 +423,7 @@ class Library {
       if (!session || session.closed || session.note.mime !== 'audio/wav') throw new Error('진행 중인 Live 녹음이 없습니다.');
       const seconds = session.bytes / 32000;
       if (!Array.isArray(segments) || !segments.every(s => Number.isFinite(s.start) && Number.isFinite(s.end) && s.start >= 0 && s.start <= s.end && s.end <= seconds && typeof s.text === 'string')) throw new Error('Live 스크립트 시간이 올바르지 않습니다.');
-      session.note = { ...session.note, segments, seconds, duration: duration(seconds) };
+      session.note = { ...session.note, ...this.data.notes.find(item => item.id === id), segments, seconds, duration: duration(seconds) };
       await session.handle.write(waveHeader(session.bytes), 0, 44, 0); await session.handle.sync();
       // Per-note checkpoints remain durable; rebuilding the global index recovers them.
       await atomicJson(path.join(this.recordings, id, 'note.json'), session.note);
