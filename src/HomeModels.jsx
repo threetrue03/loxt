@@ -6,7 +6,7 @@ import { roleNames } from './modelOptions.js';
 import './model-store.css';
 
 export default function HomeModels({ mode, onOpen }) {
-  const { data } = useModelStore();
+  const { data } = useModelStore({ includeEnvironment: false });
   const { preferences, change, operation, pending } = useSettings();
   const [error, setError] = useState('');
   const selected = preferences[mode].model;

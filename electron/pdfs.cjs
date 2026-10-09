@@ -23,7 +23,7 @@ class PDFs {
   async create(folder='') { const {PDFDocument}=require('pdf-lib'),doc=await PDFDocument.create();doc.addPage([595.28,841.89]);return this.import(await doc.save(),'새 그리기.pdf',folder,'drawing'); }
   async info(id) {await this.library.ready;const note=this.note(id),stat=await fs.stat(this.file(id));return {bytes:stat.size,numPages:note.pages,documentType:note.documentType||'pdf'};}
   async page(id,page) {this.note(id);return require('./pdf-jobs.cjs').pdfJob({file:this.file(id),action:'page',page});}
-  async preview(id,page,scale) {this.note(id);return require('./pdf-jobs.cjs').pdfJob({file:this.file(id),action:'raster',page,scale});}
+  async preview(id,page,scale,options) {this.note(id);return require('./pdf-jobs.cjs').pdfJob({file:this.file(id),action:'raster',page,scale},options);}
   async destination(id,dest) {this.note(id);return require('./pdf-jobs.cjs').pdfJob({file:this.file(id),action:'destination',dest});}
   async outline(id) {this.note(id);return require('./pdf-jobs.cjs').pdfJob({file:this.file(id),action:'info'});}
   async prepareIndex(id) {

@@ -1,6 +1,7 @@
 const fs=require('node:fs/promises'),path=require('node:path'),{randomUUID}=require('node:crypto');
 const {Memos,plainText}=require('./memos.cjs'),{PDFs}=require('./pdfs.cjs');
 function webServices({modelStore,modelPending,libraries,actions,conversions,preferences,root,dist,BrowserWindow,isBusy,getLiveState,onRecordingChange}){
+ const previews=new Map(),canceledPreviews=new Map();
  const exports=new Map(),recordings=new Map(),clientActions=new Map();
  const exportRoot=path.resolve(root),previewRoot=path.join(root,'pdf-previews');let previewReady;
  async function preparePreviews(){await fs.mkdir(previewRoot,{recursive:true});if((await fs.lstat(previewRoot)).isSymbolicLink())throw Error('PDF 캐시 경로를 확인해 주세요.');for(const name of await fs.readdir(previewRoot)){if(!/^[a-f0-9-]{36}\.(png|jpg)$/.test(name))continue;const file=path.join(previewRoot,name);if((await fs.lstat(file)).isFile())await fs.unlink(file).catch(()=>{});}}
@@ -21,7 +22,7 @@ function webServices({modelStore,modelPending,libraries,actions,conversions,pref
   if(method==='search')return require('./library-search.cjs').searchLibrary(store(p.workspace),p);
   if(method==='audio.detach'){if(isBusy?.({...p,ids:[p.id]})||conversions?.snapshot().queue.some(job=>job.id===p.id))throw Error('현재 작업을 마친 뒤 원본을 삭제해 주세요.');return store(p.workspace).detachAudio(p.id);}
   if(method==='manage'){if(isBusy?.(p))throw new Error('현재 작업을 마친 뒤 변경해 주세요.');const key=context.device+':'+p.workspace;if(!clientActions.has(key))clientActions.set(key,new (require('./library-actions.cjs').LibraryActions)(store(p.workspace)));return clientActions.get(key).run(p);}
-  if(method.startsWith('library.')){const s=store(p.workspace);switch(method){case 'library.detail':return s.detail(p.id);case 'library.list':{const data=await s.listSummary();delete data.storagePath;return data;}case 'library.createFolder':return s.createFolder({name:p.name,parent:p.parent||''});case 'library.renameFolder':return s.renameFolder({folder:p.folder,name:p.name});case 'library.deleteFolder':if(isBusy?.(p))throw new Error('PC 작업을 마친 뒤 삭제해 주세요.');return s.deleteFolder(p.folder);case 'library.update':if(p.changes?.deleted&&isBusy?.({...p,ids:[p.id]}))throw new Error('PC 작업을 마친 뒤 삭제해 주세요.');return s.updateNote(p.id,p.changes,p.changes?.expected||p.expected);case 'library.restore':return s.restoreTrash(p.ids);case 'library.delete':if(isBusy?.(p))throw new Error('현재 작업을 마친 뒤 삭제해 주세요.');return s.deleteTrash(p.ids);case 'library.move':return s.moveNotes({ids:p.ids,folder:p.folder});}}
+  if(method.startsWith('library.')){const s=store(p.workspace);switch(method){case 'library.catalog':{const data=await require('../shared/library-range.cjs').catalog(s,p);delete data.storagePath;return data;}case 'library.page':return require('../shared/library-range.cjs').page(s,p);case 'library.detail':return s.detail(p.id);case 'library.list':{const data=await s.listSummary();delete data.storagePath;return data;}case 'library.createFolder':return s.createFolder({name:p.name,parent:p.parent||''});case 'library.renameFolder':return s.renameFolder({folder:p.folder,name:p.name});case 'library.deleteFolder':if(isBusy?.(p))throw new Error('PC 작업을 마친 뒤 삭제해 주세요.');return s.deleteFolder(p.folder);case 'library.update':if(p.changes?.deleted&&isBusy?.({...p,ids:[p.id]}))throw new Error('PC 작업을 마친 뒤 삭제해 주세요.');return s.updateNote(p.id,p.changes,p.changes?.expected||p.expected);case 'library.restore':return s.restoreTrash(p.ids);case 'library.delete':if(isBusy?.(p))throw new Error('현재 작업을 마친 뒤 삭제해 주세요.');return s.deleteTrash(p.ids);case 'library.move':return s.moveNotes({ids:p.ids,folder:p.folder});}}
   if(method==='convert'){if(modelPending?.())throw Error('PC의 모델 작업을 마친 뒤 변환해 주세요.');if(p.workspace!=='work')throw new Error('모바일 신규 변환은 Work에서 사용해 주세요.');const env=await conversions.environment();if(!env.models?.some(m=>m.id===p.model&&m.downloaded))throw new Error('PC에 설치된 모델을 선택해 주세요.');return conversions.enqueue({id:p.id,workspace:'work',model:p.model});}
   if(method==='cancel'){const note=locate(p.id).data.notes.find(n=>n.id===p.id);if(!note)throw new Error('작업을 찾지 못했습니다.');return conversions.cancel(p.id);}
   if(method==='memo.create')return new Memos(store(p.workspace)).create(p.folder||'');
@@ -40,7 +41,12 @@ function webServices({modelStore,modelPending,libraries,actions,conversions,pref
   if(method==='pdf.outline')return new PDFs(store(p.workspace)).outline(p.id);
   if(method==='pdf.destination')return new PDFs(store(p.workspace)).destination(p.id,p.dest);
   if(method==='pdf.prepareIndex')return new PDFs(store(p.workspace)).prepareIndex(p.id);
-  if(method==='pdf.preview'){const value=await new PDFs(store(p.workspace)).preview(p.id,p.page,p.scale);const image=await output('.'+value.format,file=>fs.writeFile(file,value.bytes),true);const item=exports.get(image.download.split('/').at(-1));item.name=null;item.mime=value.format==='jpg'?'image/jpeg':'image/png';return {...image,width:value.width,height:value.height};}
+  if(method==='pdf.cancelPreview'){if(typeof p.renderKey!=='string'||p.renderKey.length>100)throw Error('PDF 요청을 확인해 주세요.');const key=context.device+':'+p.renderKey;previews.get(key)?.abort();canceledPreviews.set(key,Date.now());for(const [k,time]of canceledPreviews)if(time<Date.now()-30000||canceledPreviews.size>512)canceledPreviews.delete(k);return true;}
+  if(method==='pdf.preview'){
+   if(p.renderKey!=null&&(typeof p.renderKey!=='string'||p.renderKey.length>100))throw Error('PDF 요청을 확인해 주세요.');
+   const key=context.device+':'+(p.renderKey||randomUUID()),controller=new AbortController();if(canceledPreviews.has(key))throw require('./pdf-queue.cjs').abortError();previews.set(key,controller);
+   try{const value=await new PDFs(store(p.workspace)).preview(p.id,p.page,p.scale,{signal:controller.signal,priority:true});if(controller.signal.aborted)throw require('./pdf-queue.cjs').abortError();const image=await output('.'+value.format,file=>fs.writeFile(file,value.bytes),true);const item=exports.get(image.download.split('/').at(-1));item.name=null;item.mime=value.format==='jpg'?'image/jpeg':'image/png';return {...image,width:value.width,height:value.height};}finally{if(previews.get(key)===controller)previews.delete(key);canceledPreviews.delete(key);}
+  }
   if(method==='pdf.index')return new PDFs(store(p.workspace)).index(p);
   if(method==='pdf.searchIndex')return new PDFs(store(p.workspace)).searchIndex(p.id);
   if(method==='pdf.changes')return new PDFs(store(p.workspace)).changes(p);
@@ -62,6 +68,6 @@ function webServices({modelStore,modelPending,libraries,actions,conversions,pref
   throw new Error('웹에서 지원하지 않는 기능입니다. PC 앱에서 사용해 주세요.');
  }
  async function asset(url){const [type,mode,id,name,...rest]=url.pathname.slice('/file/'.length).split('/');if(rest.length)throw new Error('파일 주소를 확인해 주세요.');if(type==='export'){const value=exports.get(mode);if(!value||value.expires<Date.now())throw new Error('다운로드가 만료되었습니다. 다시 내보내 주세요.');return value;}const s=store(mode);const note=s.data.notes.find(n=>n.id===id&&!n.deleted);if(!note)throw new Error('파일이 삭제되었거나 존재하지 않습니다.');if(type==='pdf')return {filename:new PDFs(s).file(id),mime:'application/pdf'};if(type==='audio')return s.getAudio(id);if(type==='memo')return new Memos(s).asset(`loxt-asset://memo/${id}/${name}`);throw new Error('파일 주소를 확인해 주세요.');}
- return {rpc:async(...args)=>require('../shared/library-summary.cjs').lightResult(await rpc(...args)),asset};
+ return {rpc:async(...args)=>args[0]==='library.list'?require('../shared/library-summary.cjs').lightResult(await rpc(...args)):require('../shared/library-range.cjs').transportResult(await rpc(...args)),asset};
 }
 module.exports={webServices};

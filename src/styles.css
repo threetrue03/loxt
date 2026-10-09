@@ -235,3 +235,8 @@ body{user-select:none}
 input,textarea,[contenteditable="true"],[contenteditable="true"] *,.transcript,.transcript *,.note-preview,.note-preview *,.memo-scroll,.memo-scroll *{user-select:text}
 
 .device-settings img{display:block;border-radius:8px;margin:16px 0}.device-settings code,.device-settings .hint{overflow-wrap:anywhere}.device-settings details{margin:20px 0}.device-settings ol{padding-left:20px;line-height:1.8}.device-settings h3{margin:24px 0 12px}
+
+.sidebar .sidebar-create.primary{border-color:transparent}
+
+.selection-drag small{display:block;font-size:12px;color:var(--muted)}
+.library-load-more{margin:16px auto;display:block}

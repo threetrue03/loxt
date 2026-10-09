@@ -34,8 +34,11 @@ test('Work keeps existing paths, recordings and scripts; Live starts with its ow
   assert.equal((await stores.live.list()).notes[0].deleted, true);
   assert.deepEqual(await stores.work.list(), before, 'Live folder/trash operations cannot change Work');
   await stores.live.restoreTrash([liveNote.id]);
+  const restoredLive=await stores.live.detail(liveNote.id);assert.equal(restoredLive.folder,'Live 회의/Live 하위');
+  const folderTrash=(await stores.live.list()).notes.find(n=>n.kind==='folder');await stores.live.restoreTrash([folderTrash.id]);
   await stores.live.updateNote(liveNote.id, { deleted: true });
   await stores.live.deleteTrash([liveNote.id]);
+  await stores.live.deleteFolder('Live 회의');const emptyFolderTrash=(await stores.live.list()).notes.find(n=>n.kind==='folder');await stores.live.deleteTrash([emptyFolderTrash.id]);
   stores = new WorkspaceLibraries(root);
   assert.deepEqual(await stores.work.list(), before);
   assert.deepEqual((await stores.live.list()).notes, []);

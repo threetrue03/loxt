@@ -1,3 +1,4 @@
+import {menuKey} from './useMenuKeyboard.js';
 import { DialogContext } from './DialogContext.js';
 import { useContext, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -21,7 +22,7 @@ export default function Menu({ label, trigger, children, className = '', disable
     function outside(event) { if (root.current && !root.current.contains(event.target) && !popup.contains(event.target)) setOpen(false); }
     function keys(event) {
       const numeric=popup.querySelector(`[data-shortcut-key="${event.key}"]`);if(numeric&&!event.altKey){event.preventDefault();event.stopPropagation();numeric.click();return;}
-      if (event.key === 'Escape') { event.preventDefault(); setOpen(false); button.current.focus(); }
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setOpen(false); button.current.focus(); return; }
       if (event.key === 'Tab') {
         setOpen(false);
         if (dialog?.current) {
@@ -30,13 +31,9 @@ export default function Menu({ label, trigger, children, className = '', disable
           const index = items.indexOf(button.current);
           items[(index + (event.shiftKey ? -1 : 1) + items.length) % items.length]?.focus();
         } else button.current?.focus();
+        return;
       }
-      if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
-      const items = [...popup.querySelectorAll('[role^="menuitem"]')].filter(item => !item.disabled);
-      if (!items.length) return;
-      event.preventDefault();
-      const index = items.indexOf(document.activeElement);
-      items[event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (index + (event.key === 'ArrowUp' ? -1 : 1) + items.length) % items.length].focus();
+      menuKey(event,popup,()=>setOpen(false),()=>button.current?.focus());
     }
     place(); const observer = new ResizeObserver(place); observer.observe(popup);
     document.addEventListener('pointerdown', outside); document.addEventListener('keydown', keys); window.addEventListener('resize', place);

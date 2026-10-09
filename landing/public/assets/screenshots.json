@@ -1,10 +1,10 @@
 {
-  "version": "2.6.0",
+  "version": "2.7.0",
   "examples": true,
   "liveInference": false,
   "modelCatalogExamples": true,
   "exampleAudio": "silent WAV and scripted transcript/speaker data; not accuracy or speed measurements",
-  "capturedAt": "2026-10-09T11:43:52.051Z",
+  "capturedAt": "2026-10-09T17:38:54.241Z",
   "images": [
     {
       "file": "sidebar-collapsed-work.png",
@@ -53,6 +53,18 @@
       "width": 1783,
       "height": 1079,
       "scenario": "work-independent-memo"
+    },
+    {
+      "file": "memo-outline.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "work-memo-outline-h1-h4"
+    },
+    {
+      "file": "memo-code.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "work-memo-code-language-search"
     },
     {
       "file": "memo-block-menu.png",
@@ -137,6 +149,18 @@
       "width": 1783,
       "height": 1079,
       "scenario": "work-independent-memo-light"
+    },
+    {
+      "file": "light-memo-outline.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "work-memo-outline-light"
+    },
+    {
+      "file": "light-memo-code.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "work-memo-code-language-light"
     },
     {
       "file": "model-store.png",
@@ -266,6 +290,13 @@
       "width": 390,
       "height": 844,
       "scenario": "approved-mobile-work-library",
+      "example": true
+    },
+    {
+      "file": "mobile-memo-outline.png",
+      "width": 390,
+      "height": 844,
+      "scenario": "approved-mobile-memo-outline",
       "example": true
     },
     {

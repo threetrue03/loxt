@@ -10,10 +10,10 @@
   <p>녹음하고, 변환하고, 메모하세요. 기록은 내 PC에.</p>
 
   <img src="https://img.shields.io/badge/Windows-x64-0078D4.svg" alt="Windows x64">
-  <img src="https://img.shields.io/badge/Version-2.6.0-59695D.svg" alt="소개 버전 2.6.0">
+  <img src="https://img.shields.io/badge/Version-2.7.0-59695D.svg" alt="소개 버전 2.7.0">
 
   <p>
-    <a href="https://github.com/threetrue03/loxt/releases/download/v2.6.0/LOXT-Setup-2.6.0-x64.exe"><strong>Windows 다운로드 · v2.6.0</strong></a> ·
+    <a href="https://github.com/threetrue03/loxt/releases/download/v2.7.0/LOXT-Setup-2.7.0-x64.exe"><strong>Windows 다운로드 · v2.7.0</strong></a> ·
     <a href="https://loxt.pages.dev/">소개 사이트</a> ·
     <a href="https://github.com/threetrue03/loxt/releases">릴리스 안내</a> ·
     <a href="https://github.com/threetrue03/loxt/issues">문의 · 버그 신고</a>
@@ -34,7 +34,7 @@ LOXT는 내 컴퓨터의 하드웨어로 음성을 스크립트로 변환하는 
   <img src="./docs/assets/workspace-dark.png" alt="LOXT Work 홈: 녹음, 파일·YouTube 불러오기, 내 보관함과 진행 중인 작업" width="100%">
 </picture>
 
-*2.6.0 실제 앱 화면입니다. 녹음·스크립트·메모는 소개용 예시이며 변환 정확도나 속도의 측정 결과가 아닙니다.*
+*2.7.0 실제 앱 화면입니다. 녹음·스크립트·메모는 소개용 예시이며 변환 정확도나 속도의 측정 결과가 아닙니다.*
 
 ## Work와 Live
 
@@ -74,6 +74,22 @@ LOXT는 내 컴퓨터의 하드웨어로 음성을 스크립트로 변환하는 
 | **보관함** | 중첩 폴더·이름 변경·경로 이동·여러 기록 선택·드래그 이동·휴지통 복구와 비우기를 지원합니다. |
 | **변환 대기열** | 다른 페이지로 이동해도 변환을 유지하고 작업별 상태 확인·취소를 제공합니다. |
 | **화면과 설정** | SUIT 글꼴, 다크·라이트 테마, 카드·작은 카드·목록 보기와 Work·Live별 기본 모델·입력 장치를 제공합니다. |
+
+## 2.7.0 — 목차·파일 관리와 문서 최적화
+
+- 메모의 **목차** 버튼에서 **# ~ ####** 제목을 트리로 탐색합니다. Work·Live의 독립/연결 메모에 공통으로 제공하며 좁은 화면에서는 내부 패널로 겹쳐 엽니다.
+- 중간 블록만 삭제해도 하위 내용은 남습니다. 여러 블록을 선택하고 **Tab / Shift+Tab**으로 함께 들여쓰기·내어쓰기를 적용하세요. **`>` + 공백**은 접기·펼치기 블록, **삼중 백틱**은 코드 블록으로 변환합니다. 언어 검색과 Docker 등 추가 언어, 토글 들여쓰기 선의 색상 표시를 지원합니다.
+- 굵게·링크 등 **서식 경계를 넘는 문구 검색**과 첫 결과 이동을 수정했습니다. 터치 화면의 메모 도구는 44px 조작 영역을 사용합니다.
+- 선택·드래그 안내는 **녹음·스크립트·메모·PDF·그리기·폴더**를 구분합니다. 혼합 선택은 항목 수로 표시하며 Esc 뒤 첫 클릭 누락을 수정했습니다.
+- 카드의 긴 스크립트 전체 줄 수와 **Live 패널 더 보기**를 수정했습니다. 사이드바 새 녹음의 상시 테두리를 제거했습니다.
+- 단일 폴더 이동과 **폴더 구조 휴지통 복구**를 지원합니다. 빈 하위 폴더도 복구하며 동명 폴더는 기존 내용을 보존하고 복구 경로를 분리합니다.
+- 보관함은 가벼운 탐색 목록과 **120개 단위 현재 폴더 미리보기**를 분리합니다. 목록 증분 갱신, 초기 파일 읽기, 영역 선택과 문서 저장·캐시를 개선했습니다.
+- 취소한 원격 PDF 대기 작업을 제거하고 요청을 기기별로 구분합니다. 모델 검색·문서 캐시에 용량 제한을 두고 웹 정적 자산의 재검증·압축을 적용했습니다.
+- YouTube 모델 선택에 Work 역할·별명을 동일하게 표시하고 빈 공간 메뉴의 키보드 탐색을 지원합니다.
+
+![메모 목차](./landing/public/assets/memo-outline.png)
+
+[구현·검증 범위](./docs/implementation-2.7.0.md) · [릴리스 문구](./docs/release-2.7.0.md)
 
 ## 2.6.0 — 모델 스토어와 내 PC 성능 확인
 

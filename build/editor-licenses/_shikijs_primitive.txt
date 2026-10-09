@@ -1,4 +1,4 @@
-@shikijs/primitive 4.5.0
+@shikijs/primitive 4.4.3
 License: MIT
 Source: "git+https://github.com/shikijs/shiki.git"
 

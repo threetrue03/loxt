@@ -1,15 +1,16 @@
 import {documentTiming} from './syncDiagnostics.js';
 import {requestDocumentRefresh} from './documentRefresh.js';
 import {documentPending,registerDocumentFlusher} from './documentPending.js';
+import {estimateDocumentBytes,trimIdleDocuments} from './documentCache.js';
 const entries=new Map();let subscribed=false;
-export function publish(e,changes){e.state={...e.state,...changes};e.listeners.forEach(fn=>fn());documentPending('pdf',[...entries.values()].filter(e=>e.state.dirty||e.state.saving).map(e=>e.id));if(entries.size>20){for(const [key,item] of entries){if(entries.size<=20)break;if(!item.listeners.size&&!item.state.dirty&&!item.state.saving&&!item.state.loading)entries.delete(key);}}}
+export function publish(e,changes){if(changes.objects&&changes.objects!==e.state.objects)e.cacheBytes=estimateDocumentBytes({objects:changes.objects,history:e.history,redo:e.redo});e.state={...e.state,...changes};e.listeners.forEach(fn=>fn());documentPending('pdf',[...entries.values()].filter(e=>e.state.dirty||e.state.saving).map(e=>e.id));trimIdleDocuments(entries,{protectedEntry:item=>item.listeners.size||item.state.dirty||item.state.saving||item.state.loading||item.request||item.refresh,onEvict:item=>{clearTimeout(item.timer);clearTimeout(item.backupTimer);}});}
 export function backup(e){clearTimeout(e.backupTimer);try{localStorage.setItem('loxt.pdf.draft:'+e.key,JSON.stringify({revision:e.state.revision,objects:e.state.objects,pageIds:e.state.pageIds}));}catch{publish(e,{error:'임시 저장 공간이 부족합니다. 필기 사본을 저장해 주세요.'});}}
 function journal(e){clearTimeout(e.backupTimer);e.backupTimer=setTimeout(()=>backup(e),150);}
 export function pdfEntry(id,mode){
  const key=`${window.desktop.hostId||'desktop'}:${mode}:${id}`;
  if(!entries.has(key))entries.set(key,{id,mode,key,documentPayload:{id,workspace:mode},state:{loading:true,objects:[],revision:0,error:'',dirty:false,saving:false},listeners:new Set(),history:[],redo:[],savedObjects:[],lastSavedAt:Date.now(),timer:null,request:null});
  if(!subscribed){subscribed=true;registerDocumentFlusher('pdf',async()=>{await Promise.all([...entries.values()].map(persist));if([...entries.values()].some(e=>e.state.dirty))throw Error('필기 저장을 마치지 못했습니다. 초안을 보존했습니다.');});window.desktop.onLibraryChange(event=>{if(event.kind&&event.kind!=='pdf'&&!event.resync)return;for(const e of entries.values())if(e.mode===event.workspace&&(!event.id||event.id===e.id)){e.refreshFailed=false;requestDocumentRefresh(e,window.desktop.pdf,'objects',publish,event.documentRevision||Infinity,event.requestId);}});window.addEventListener('beforeunload',event=>{for(const e of entries.values())if(e.state.dirty){backup(e);event.preventDefault();event.returnValue='';}});}
- return entries.get(key);
+ const entry=entries.get(key);entry.lastAccess=Date.now();return entry;
 }
 export async function loadAnnotations(e){const doc=await window.desktop.pdf.get({workspace:e.mode,id:e.id});if(!e.state.loading&&(e.state.dirty||e.state.saving))return;let pending;try{pending=JSON.parse(localStorage.getItem('loxt.pdf.draft:'+e.key));}catch{}e.savedObjects=doc.objects;e.savedPageIds=doc.pageIds;publish(e,{...doc,loading:false,dirty:Boolean(pending),objects:pending?.objects||doc.objects,pageIds:pending?.pageIds||doc.pageIds,revision:pending?.revision??doc.revision,error:pending?'저장 대기 중인 필기를 복구했습니다. 저장을 다시 시도해 주세요.':''});if(e.targetRevision&&!e.state.dirty)requestDocumentRefresh(e,window.desktop.pdf,'objects',publish,e.targetRevision);}
 export async function persist(e){

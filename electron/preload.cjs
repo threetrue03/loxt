@@ -92,6 +92,8 @@ contextBridge.exposeInMainWorld('desktop', Object.freeze({
   retrySpeakers: (id, workspace) => ipcRenderer.invoke('transcription:retry-speakers', { id, workspace }),
   onLibraryChange: callback => { const listener = (_event, value) => callback(value); ipcRenderer.on('library:changed', listener); return () => ipcRenderer.removeListener('library:changed', listener); },
   getAppInfo: () => ipcRenderer.invoke('app:info'),
+  getLibraryCatalog: payload => ipcRenderer.invoke('library:catalog',payload),
+  getLibraryPage: payload => ipcRenderer.invoke('library:page',payload),
   getLibrary: () => ipcRenderer.invoke('library:list'),
   getNote: (id, workspace='work') => ipcRenderer.invoke('library:detail',{id,workspace}),
   createFolder: (name, parent = '') => ipcRenderer.invoke('library:folder', { name, parent }),

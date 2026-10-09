@@ -183,7 +183,16 @@
   },
   {
     "name": "@shikijs/core",
-    "version": "4.5.0",
+    "version": "4.4.3",
+    "license": "MIT",
+    "source": "git+https://github.com/shikijs/shiki.git",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "@shikijs/types",
+    "version": "4.4.3",
     "license": "MIT",
     "source": "git+https://github.com/shikijs/shiki.git",
     "files": [
@@ -192,7 +201,16 @@
   },
   {
     "name": "@shikijs/engine-javascript",
-    "version": "4.5.0",
+    "version": "4.4.3",
+    "license": "MIT",
+    "source": "git+https://github.com/shikijs/shiki.git",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "@shikijs/types",
+    "version": "4.4.3",
     "license": "MIT",
     "source": "git+https://github.com/shikijs/shiki.git",
     "files": [
@@ -201,7 +219,16 @@
   },
   {
     "name": "@shikijs/langs-precompiled",
-    "version": "4.5.0",
+    "version": "4.4.3",
+    "license": "MIT",
+    "source": "git+https://github.com/shikijs/shiki.git",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "@shikijs/types",
+    "version": "4.4.3",
     "license": "MIT",
     "source": "git+https://github.com/shikijs/shiki.git",
     "files": [
@@ -210,7 +237,16 @@
   },
   {
     "name": "@shikijs/primitive",
-    "version": "4.5.0",
+    "version": "4.4.3",
+    "license": "MIT",
+    "source": "git+https://github.com/shikijs/shiki.git",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "@shikijs/types",
+    "version": "4.4.3",
     "license": "MIT",
     "source": "git+https://github.com/shikijs/shiki.git",
     "files": [
@@ -219,7 +255,16 @@
   },
   {
     "name": "@shikijs/themes",
-    "version": "4.5.0",
+    "version": "4.4.3",
+    "license": "MIT",
+    "source": "git+https://github.com/shikijs/shiki.git",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "@shikijs/types",
+    "version": "4.4.3",
     "license": "MIT",
     "source": "git+https://github.com/shikijs/shiki.git",
     "files": [

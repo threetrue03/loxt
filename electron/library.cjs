@@ -8,7 +8,7 @@ const MIME = { '.webm': 'audio/webm', '.ogg': 'audio/ogg', '.mp3': 'audio/mpeg',
 function validNote(note) {
   return note && typeof note === 'object' && ID.test(note.id)
     && typeof note.title === 'string' && typeof note.folder === 'string'
-    && Array.isArray(note.segments) && (note.kind === 'memo' || (note.kind === 'pdf' && note.audioFile === 'original.pdf' && Number.isSafeInteger(note.pages) && note.pages > 0) || (typeof note.audioFile === 'string' && path.basename(note.audioFile) === note.audioFile
+    && Array.isArray(note.segments) && (note.kind === 'folder' ? require('./folder-trash.cjs').validFolderTrash(note) : note.kind === 'memo' || (note.kind === 'pdf' && note.audioFile === 'original.pdf' && Number.isSafeInteger(note.pages) && note.pages > 0) || (typeof note.audioFile === 'string' && path.basename(note.audioFile) === note.audioFile
     && Boolean(MIME[path.extname(note.audioFile)])));
 }
 function recoverConversion(note) {
@@ -52,6 +52,7 @@ async function atomicJson(filename, data) {
 async function exists(filename) {
   try { await fs.access(filename); return true; } catch { return false; }
 }
+async function mapLimited(items,limit,work){const results=new Array(items.length);let cursor=0;await Promise.all(Array.from({length:Math.min(limit,items.length)},async()=>{for(;;){const i=cursor++;if(i>=items.length)return;results[i]=await work(items[i]);}}));return results;}
 
 class Library {
   constructor(root) {
@@ -110,16 +111,14 @@ class Library {
     this.recovery = recovery || this.data.recovery || null;
     // 각 녹음의 메타데이터로 목록을 복구하므로 목록 저장 직전 중단에도 원본이 남습니다.
     let changed = Boolean(recovery);
-    for (const entry of await fs.readdir(this.recordings, { withFileTypes: true })) {
-      if (!entry.isDirectory() || !ID.test(entry.name)) continue;
-      const directory = path.join(this.recordings, entry.name);
-      let note;
-      try { note = JSON.parse(await fs.readFile(path.join(directory, 'note.json'), 'utf8')); }
-      catch { if (recovery) recovery.skipped++; continue; }
-      if (!validNote(note) || note.id !== entry.name) { if (recovery) recovery.skipped++; continue; }
-      const audio = path.join(directory, note.kind === 'memo' ? 'note.json' : note.audioFile);
+    const entries=(await fs.readdir(this.recordings,{withFileTypes:true})).filter(entry=>entry.isDirectory()&&ID.test(entry.name));
+    const loaded=await mapLimited(entries,8,async entry=>{const directory=path.join(this.recordings,entry.name);try{const note=JSON.parse(await fs.readFile(path.join(directory,'note.json'),'utf8'));if(!validNote(note)||note.id!==entry.name)return null;const audio=path.join(directory,['memo','folder'].includes(note.kind)?'note.json':note.audioFile);return {directory,note,audio,hasAudio:['memo','folder'].includes(note.kind)||await exists(audio)};}catch{return null;}});
+    const byId=new Map(this.data.notes.map((note,index)=>[note.id,index])),added=[],folderSet=new Set(this.data.folders);
+    for (const item of loaded) {
+      if(!item){if(recovery)recovery.skipped++;continue;}
+      const {directory,audio}=item;let note=item.note,hasAudio=item.hasAudio;
       const partial = audio + '.part';
-      if (!(await exists(audio)) && await exists(partial)) {
+      if (!hasAudio && await exists(partial)) {
         const stat = await fs.stat(partial);
         if (note.live && note.mime === 'audio/wav' && stat.size >= 44) {
           const bytes = Math.floor((stat.size - 44) / 2) * 2;
@@ -131,19 +130,20 @@ class Library {
         }
         if (stat.size === 0) continue;
         await fs.rename(partial, audio);
+        hasAudio=true;
         note.recovered = true;
         note.done = Boolean(note.live);
         note.status = 'ready';
         await atomicJson(path.join(directory, 'note.json'), note);
       }
-      if (!(await exists(audio)) && !(note.audioMissing && note.done)) continue;
+      if (!hasAudio && !(note.audioMissing && note.done)) continue;
       // Page operations persist the complete drawing snapshot before deferred metadata.
       if(note.documentType==='drawing'){try{const doc=JSON.parse(await fs.readFile(path.join(directory,'annotations.json'),'utf8'));if(doc.version===1&&Array.isArray(doc.pageIds)){const ids=require('./drawing-pages.cjs').validatePages(doc.pageIds);if(note.pages!==ids.length){note.pages=ids.length;await atomicJson(path.join(directory,'note.json'),note);changed=true;}}}catch{ /* The PDF reader reports invalid annotations without changing the original. */ }}
-      if (note.folder && note.folder.length <= 1024 && !this.data.folders.includes(note.folder)) {
+      if (note.folder && note.folder.length <= 1024 && !folderSet.has(note.folder)) {
         const parts = note.folder.split('/');
         for (let i = 1; i <= parts.length; i++) {
           const folder = parts.slice(0, i).join('/');
-          if (!this.data.folders.includes(folder)) this.data.folders.push(folder);
+          if (!folderSet.has(folder)){this.data.folders.push(folder);folderSet.add(folder);}
           if (i > 1) this.data.folderParents[folder] = parts.slice(0, i - 1).join('/');
         }
         changed = true;
@@ -157,14 +157,14 @@ class Library {
         note = restored;
         await atomicJson(path.join(directory, 'note.json'), note);
       }
-      const current = this.data.notes.findIndex(n => n.id === note.id);
-      if (current < 0) { this.data.notes.unshift(note); changed = true; }
+      const current = byId.get(note.id);
+      if (current === undefined) { added.push(note); changed = true; }
       else if (JSON.stringify(this.data.notes[current]) !== JSON.stringify(note)) { const previous=this.data.notes[current];this.data.notes[current]=note; if(!previous._summary||JSON.stringify(previous)!==JSON.stringify(require('../shared/library-summary.cjs').summary(note)))changed=true; }
     }
+    if(added.length)this.data.notes=[...added.reverse(),...this.data.notes];
     if (recovery) {
-      const available = [];
-      for (const note of this.data.notes) { if (note.audioMissing && note.done || await exists(path.join(this.recordings, note.id, note.kind === 'memo' ? 'note.json' : note.audioFile))) available.push(recoverConversion(note)); else recovery.skipped++; }
-      this.data.notes = available;
+      const available=await mapLimited(this.data.notes,8,async note=>note.audioMissing&&note.done||await exists(path.join(this.recordings,note.id,['memo','folder'].includes(note.kind)?'note.json':note.audioFile))?recoverConversion(note):null);
+      recovery.skipped+=available.filter(n=>!n).length;this.data.notes=available.filter(Boolean);
     }
     if (changed || !(await exists(this.index))) { this.validateIndex(this.data); await this.saveIndex(this.data, !recovery); }
   }
@@ -237,7 +237,7 @@ class Library {
       name = parent ? `${parent}/${name.trim()}` : name.trim();
       if (name.length > 1024 || name.split('/').length > 16) throw new Error('폴더 단계가 너무 깊습니다.');
       if (this.data.folders.includes(name)) throw new Error('이미 있는 폴더 이름입니다.');
-      const next = { ...this.data, folders: [...this.data.folders, name], folderParents: { ...this.data.folderParents, ...(parent ? { [name]: parent } : {}) } };
+      const next = { ...this.data, folders: [...this.data.folders, name],folderIds:{...this.data.folderIds,[name]:randomUUID()}, folderParents: { ...this.data.folderParents, ...(parent ? { [name]: parent } : {}) } };
       await this.saveIndex( next); this.data = next;
       return this.snapshot();
     });
@@ -246,8 +246,10 @@ class Library {
     const data = journal?.data;
     if (journal?.version !== 1 || data?.version !== 1 || !Array.isArray(data.folders) || !data.folders.every(folder => typeof folder === 'string' && folder.length <= 1024)
       || !Array.isArray(data.notes) || !data.notes.every(validNote) || !Array.isArray(journal.notes) || !journal.notes.every(validNote)) throw new Error('폴더 변경 기록을 읽지 못했습니다. 원본은 유지됩니다.');
-    for (const note of journal.notes) await atomicJson(path.join(this.recordings, note.id, 'note.json'), note);
+    const removed=journal.remove||[];if(!Array.isArray(removed)||removed.some(id=>!ID.test(id)||data.notes.some(note=>note.id===id)))throw Error('폴더 복구 정리 위치를 확인해 주세요.');
+    for (const note of journal.notes) {await fs.mkdir(path.join(this.recordings,note.id),{recursive:true});await atomicJson(path.join(this.recordings, note.id, 'note.json'), note);}
     await this.saveIndex( data);
+    for(const id of removed){const directory=path.resolve(this.recordings,id);if(path.dirname(directory)!==path.resolve(this.recordings))throw Error('폴더 복구 정리 위치를 확인해 주세요.');await fs.rm(directory,{recursive:true,force:true});}
     await fs.unlink(path.join(this.root, 'folder-rename.json'));
   }
   renameFolder(payload) {
@@ -269,11 +271,12 @@ class Library {
       if (new Set(folders).size !== folders.length) throw new Error('이미 있는 폴더 이름입니다.');
       if (folders.some(folder => folder.length > 1024)) throw new Error('폴더 경로가 너무 깁니다.');
       const folderParents = Object.fromEntries(Object.entries(parents).map(([child, ancestor]) => [remap(child), remap(ancestor)]));
-      const remapNote = note => ({ ...note, folder: remap(note.folder) });
+      const historyPath=value=>typeof value==='string'&&(value===from||value.startsWith(from+'/'))?to+value.slice(from.length):value;
+      const remapNote = note => ({ ...note, folder: remap(note.folder),...(note.trashedFolderPath?{trashedFolderPath:historyPath(note.trashedFolderPath)}:{}),...(note.kind==='folder'?{folderTrashRoot:historyPath(note.folderTrashRoot),folderPaths:note.folderPaths.map(historyPath),folderMembers:Object.fromEntries(Object.entries(note.folderMembers).map(([id,p])=>[id,historyPath(p)])),...(note.restoredRoot?{restoredRoot:historyPath(note.restoredRoot)}:{})}:{} ) });
       const notes = this.data.notes.map(remapNote);
-      const changed = notes.filter((note, index) => note.folder !== this.data.notes[index].folder);
+      const changed = notes.filter((note, index) => JSON.stringify(note)!==JSON.stringify(this.data.notes[index]));
       const active = [...this.sessions.values()].map(session => remapNote(session.note)).filter(note => note.folder !== this.sessions.get(note.id).note.folder);
-      const next = { ...this.data, folders, folderParents, notes };
+      const next = { ...this.data, folders, folderParents,folderIds:Object.fromEntries(Object.entries(this.data.folderIds||{}).map(([folder,id])=>[remap(folder),id])), notes };
       const journal = { version: 1, data: next, notes: [...changed, ...active] };
       await atomicJson(path.join(this.root, 'folder-rename.json'), journal);
       this.folderRenamePending = true;
@@ -301,20 +304,7 @@ class Library {
     }
     return removed;
   }
-  deleteFolder(folder) {
-    return this.enqueue(async () => {
-      const removed = this.folderSubtree(folder);
-      if ([...this.sessions.values()].some(session => removed.has(session.note.folder))) throw new Error('이 폴더의 녹음을 종료한 뒤 삭제해 주세요.');
-      if (this.data.notes.some(note => removed.has(note.folder) && ['queued', 'transcribing'].includes(note.status))) throw new Error('이 폴더의 변환을 마치거나 취소한 뒤 삭제해 주세요.');
-      const changed = this.data.notes.filter(note => removed.has(note.folder)).map(note => ({ ...note, deleted: true, folder: '' }));
-      const mapped = new Map(changed.map(note => [note.id, note]));
-      const next = { ...this.data, folders: this.data.folders.filter(name => !removed.has(name)), folderParents: Object.fromEntries(Object.entries(this.data.folderParents || {}).filter(([name]) => !removed.has(name))), notes: this.data.notes.map(note => mapped.get(note.id) || note) };
-      const journal = { version: 1, data: next, notes: changed };
-      await atomicJson(path.join(this.root, 'folder-rename.json'), journal); this.folderRenamePending = true;
-      await this.commitFolderRename(journal); this.data = next; this.folderRenamePending = false;
-      return { library: this.snapshot(), removed: [...removed] };
-    });
-  }
+  async deleteFolder(folder) {await this.ready;const removed=[...this.folderSubtree(folder)];const library=await new(require('./library-actions.cjs').LibraryActions)(this).run({action:'trash',ids:[],folders:[folder]});return {library,removed};}
   trashNotes(ids) {
     if (!Array.isArray(ids) || !ids.length || ids.length > 10000 || ids.some(id => !ID.test(id)) || new Set(ids).size !== ids.length) throw new Error('휴지통 항목을 다시 선택해 주세요.');
     const notes = ids.map(id => this.data.notes.find(note => note.id === id));
@@ -323,7 +313,14 @@ class Library {
   }
   restoreTrash(ids) {
     return this.enqueue(async () => {
-      const selected=this.trashNotes(ids); if(selected.some(n=>n.kind==='audio'&&n.parentRecordingId)) return require('./audio-trash.cjs').restoreDetached(this,selected);
+      const selected=this.trashNotes(ids);
+      if(selected.some(n=>n.kind==='folder'||n.trashedFolderId)){
+        const plan=require('./folder-trash.cjs').restorePlan(this,selected);
+        const selectedIds=new Set(selected.map(n=>n.id)),audio=plan.notes.filter(n=>n.kind==='audio'&&n.parentRecordingId&&!selectedIds.has(n.id));
+        if(selected.some(n=>n.kind==='audio'&&n.parentRecordingId)||audio.length){const result=await require('./audio-trash.cjs').restoreDetached(this,[...selected,...audio],{data:plan.data,extraNotes:plan.notes,remove:plan.remove});return {...result,restoredFolders:plan.restored};}
+        const journal={version:1,data:plan.data,notes:plan.notes,remove:plan.remove};await atomicJson(path.join(this.root,'folder-rename.json'),journal);this.folderRenamePending=true;await this.commitFolderRename(journal);this.data=plan.data;this.folderRenamePending=false;return {...this.snapshot(),restoredFolders:plan.restored};
+      }
+      if(selected.some(n=>n.kind==='audio'&&n.parentRecordingId)) return require('./audio-trash.cjs').restoreDetached(this,selected);
       const changed = selected.map(note => ({ ...note, deleted: false, folder: this.data.folders.includes(note.folder) ? note.folder : '' }));
       const mapped = new Map(changed.map(note => [note.id, note]));
       const next = { ...this.data, notes: this.data.notes.map(note => mapped.get(note.id) || note) };
@@ -348,7 +345,7 @@ class Library {
   }
   deleteTrash(ids) {
     return this.enqueue(async () => {
-      this.trashNotes(ids);if(ids.some(id=>this.documents.has(id)))throw new Error('문서 저장을 마친 뒤 삭제해 주세요.');
+      this.trashNotes(ids);ids=require('./folder-trash.cjs').expandPermanentIds(this,ids);if(ids.some(id=>this.documents.has(id)||this.sessions.has(id)))throw new Error('문서 저장을 마친 뒤 삭제해 주세요.');
       const selected = new Set(ids), next = { ...this.data, notes: this.data.notes.filter(note => !selected.has(note.id)) };
       const journal = { version: 1, data: next, ids };
       await atomicJson(path.join(this.root, 'trash-delete.json'), journal); this.trashDeletePending = true;
@@ -519,14 +516,14 @@ class Library {
   setTranscription(id, changes) {
     return this.enqueue(async () => {
       const note = this.data.notes.find(n => n.id === id);
-      if (!note || note.audioMissing || ['memo','pdf'].includes(note.kind) || (note.deleted && changes.status === 'transcribing') || note.status === 'recording') throw new Error('전사할 원본을 찾지 못했습니다.');
+      if (!note || note.audioMissing || ['memo','pdf','folder'].includes(note.kind) || (note.deleted && changes.status === 'transcribing') || note.status === 'recording') throw new Error('전사할 원본을 찾지 못했습니다.');
       return this.saveNote({ ...note, ...changes });
     });
   }
   completeTranscription(id, result) {
     return this.enqueue(async () => {
       const note = this.data.notes.find(n => n.id === id);
-      if (!note || ['memo','pdf'].includes(note.kind) || !Array.isArray(result.segments) || !Number.isFinite(result.seconds) || result.seconds < 0
+      if (!note || ['memo','pdf','folder'].includes(note.kind) || !Array.isArray(result.segments) || !Number.isFinite(result.seconds) || result.seconds < 0
         || !result.segments.every(s => Number.isFinite(s.start) && Number.isFinite(s.end) && s.start >= 0 && s.end >= s.start && typeof s.text === 'string')) throw new Error('전사 결과 형식이 올바르지 않습니다.');
       if (result.segments.some(s => s.start >= result.seconds || s.end > result.seconds)) throw new Error('스크립트 시간이 원본 녹음 길이를 초과했습니다. 다시 변환해 주세요.');
       const directory = path.join(this.recordings, id);
@@ -545,7 +542,7 @@ class Library {
     await this.ready;
     if (!ID.test(id)) throw new Error('잘못된 녹음 ID입니다.');
     const note = this.data.notes.find(n => n.id === id);
-    if (!note || note.audioMissing || ['memo','pdf'].includes(note.kind) || !MIME[path.extname(note.audioFile)] || path.basename(note.audioFile) !== note.audioFile) throw new Error('녹음을 찾지 못했습니다.');
+    if (!note || note.audioMissing || ['memo','pdf','folder'].includes(note.kind) || !MIME[path.extname(note.audioFile)] || path.basename(note.audioFile) !== note.audioFile) throw new Error('녹음을 찾지 못했습니다.');
     return { filename: path.join(this.recordings, id, note.audioFile), mime: note.mime };
   }
 }

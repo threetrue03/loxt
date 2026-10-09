@@ -56,7 +56,7 @@ function installationPlan(info) {
 }
 class ModelStore {
   constructor(root, { engine, preferences, notify = () => {}, fetcher = fetch, clock = Date.now } = {}) {
-    this.root = root; this.engine = engine; this.preferences = preferences; this.notify = notify; this.fetcher = fetcher; this.clock = clock; this.queue = Promise.resolve(); this.requests = new Map(); this.error = '';
+    this.root = root; this.engine = engine; this.preferences = preferences; this.notify = notify; this.fetcher = fetcher; this.clock = clock; this.queue = Promise.resolve(); this.requests = new Map(); this.cachePruning = Promise.resolve(); this.cacheEntries = null; this.error = '';
     this.data = { version: 1, roles: { work: { low: 'small', standard: 'large-v3-turbo', high: 'large-v3' }, live: { low: 'small', standard: 'large-v3-turbo', high: 'large-v3' } }, annotations: {}, benchmarks: {}, checks: {} };
     this.ready = this.load();
   }
@@ -92,9 +92,33 @@ class ModelStore {
     let old; try { old = JSON.parse(await fs.readFile(file,'utf8')); } catch {}
     if (!force && old && this.clock() - old.at < ttl) return { ...old.value, checkedAt: old.at, cached: true };
     if (this.requests.has(key)) return this.requests.get(key);
-    const task = (async () => { try { const value = await work(); const at = this.clock(); await fs.mkdir(path.dirname(file),{recursive:true}); await atomicJson(file, { at, value }); return { ...value, checkedAt: at, cached: false }; }
+    const task = (async () => { try { const value = await work(); const at = this.clock(); await fs.mkdir(path.dirname(file),{recursive:true}); await atomicJson(file, { at, ttl, value }); await this.pruneCache(file); return { ...value, checkedAt: at, cached: false }; }
       catch (e) { if (old) return { ...old.value, checkedAt: old.at, cached: true, stale: true, error: clean(e.message,500) }; throw e; } })().finally(() => this.requests.delete(key));
     this.requests.set(key,task); return task;
+  }
+  async pruneCache(currentFile) {
+    const task = this.cachePruning.catch(() => {}).then(async () => {
+      const directory = path.join(this.root, 'store-cache');
+      const protectedNames = new Set(['featured', ...this.requests.keys()].map(key => createHash('sha256').update(key).digest('hex') + '.json'));
+      if (currentFile) protectedNames.add(path.basename(currentFile));
+      async function inspect(name) {
+        if (!/^[a-f0-9]{64}\.json$/.test(name)) return;
+        const file = path.join(directory, name); let stat, value;
+        try { stat = await fs.lstat(file); if (!stat.isFile() || stat.isSymbolicLink()) return; const handle = await fs.open(file, 'r'); const header = Buffer.alloc(512); try { const read = await handle.read(header,0,header.length,0); const text = header.toString('utf8',0,read.bytesRead); value = { at:Number(text.match(/"at"\s*:\s*(\d+)/)?.[1]),ttl:Number(text.match(/"ttl"\s*:\s*(\d+)/)?.[1]) }; } finally { await handle.close(); } if(!Number.isFinite(value.at))value.at=stat.mtimeMs; } catch { return; }
+        return {file,name,bytes:stat.size,at:value.at,ttl:Number.isFinite(value.ttl)?value.ttl:SEARCH_TTL};
+      }
+      if (!this.cacheEntries) { this.cacheEntries = new Map(); for (const name of await fs.readdir(directory).catch(() => [])) { const item = await inspect(name); if(item)this.cacheEntries.set(name,item); } }
+      if(currentFile){const item=await inspect(path.basename(currentFile));if(item)this.cacheEntries.set(item.name,item);}
+      for (const [name,item] of this.cacheEntries) if (!protectedNames.has(name) && this.clock()-item.at>=item.ttl) { try{await fs.unlink(item.file);this.cacheEntries.delete(name);}catch(error){if(error.code==='ENOENT')this.cacheEntries.delete(name);} }
+      const entries=[...this.cacheEntries.values()];let bytes = entries.reduce((sum, item) => sum + item.bytes, 0), count = entries.length;
+      entries.sort((a, b) => a.at - b.at);
+      for (const item of entries) {
+        if (count <= 80 && bytes <= 16 * 1024 * 1024) break;
+        if (protectedNames.has(item.name)) continue;
+        try { await fs.unlink(item.file); count--; bytes -= item.bytes; this.cacheEntries.delete(item.name); } catch { /* Cache cleanup never removes models or blocks a valid result. */ }
+      }
+    });
+    this.cachePruning = task; await task.catch(() => {});
   }
   async search({ query = '', cursor = 0, force = false } = {}) {
     await this.ready;

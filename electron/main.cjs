@@ -158,7 +158,7 @@ function handle(channel, work) {
   ipcMain.handle(channel, (event, payload) => {
     if (!isTrusted(event.senderFrame)) throw new Error('허용되지 않은 요청입니다.');
     if (relocating && !['browser:command', 'appearance:get', 'preferences:get'].includes(channel)) throw new Error('보관함 이전 중입니다. 완료 후 다시 시도해 주세요.');
-    return require('./sync-trace.cjs').run(require('node:crypto').randomUUID(),channel,()=>work(payload)).then(result=>require('../shared/library-summary.cjs').lightResult(result.value));
+    return require('./sync-trace.cjs').run(require('node:crypto').randomUUID(),channel,()=>work(payload)).then(result=>(['library:list','library:page'].includes(channel)||(channel==='workspace:library'&&payload?.action==='list'))?require('../shared/library-summary.cjs').lightResult(result.value):require('../shared/library-range.cjs').transportResult(result.value));
   });
 }
 function refreshBlocker() {
@@ -270,6 +270,8 @@ handle('transcription:import-model', async () => {
   });
 });
 handle('library:list', () => library.listSummary());
+handle('library:catalog', p => require('../shared/library-range.cjs').catalog(workspaceLibraries.get(p?.workspace || 'work'),p));
+handle('library:page', p => require('../shared/library-range.cjs').page(workspaceLibraries.get(p?.workspace || 'work'),p));
 handle('library:detail', p => workspaceLibraries.get(p?.workspace).detail(p?.id));
 handle('browser:command', payload => browserTabs?.command(payload));
 handle('library:manage', async payload => {

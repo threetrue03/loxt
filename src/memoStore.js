@@ -2,6 +2,7 @@ import {documentTiming} from './syncDiagnostics.js';
 import {documentPatch} from '../shared/document-patch.js';
 import {requestDocumentRefresh} from './documentRefresh.js';
 import {documentPending,registerDocumentFlusher} from './documentPending.js';
+import {estimateDocumentBytes,trimIdleDocuments} from './documentCache.js';
 // Saves survive panel closure and navigation. Bodies stay outside the library index.
 const entries = new Map();
 const empty = { loading: true, blocks: null, revision: 0, dirty: false, saving: false, error: '' };
@@ -9,14 +10,18 @@ const listeners = new Set();
 let installed = false;
 const draftKey = id => `loxt.memo.draft:${window.desktop?.hostId || 'desktop'}:${id}`;
 function backup(entry) {
-  try { localStorage.setItem(draftKey(entry.id), JSON.stringify({ blocks: entry.state.blocks, revision: entry.state.revision })); }
+  try { localStorage.setItem(draftKey(entry.id), JSON.stringify({ blocks: entry.state.blocks, revision: entry.state.revision })); entry.lastBackupAt=Date.now(); }
   catch { entry.state = { ...entry.state, error: '초안 저장 공간이 부족합니다. 현재 메모를 백업해 주세요.' }; }
 }
+function scheduleBackup(entry) {
+  clearTimeout(entry.backupTimer);
+  entry.backupTimer=setTimeout(()=>backup(entry),Math.min(500,Math.max(0,1500-(Date.now()-(entry.lastBackupAt||Date.now())))));
+}
 function trimCache() {
-  const idle = [...entries.values()].filter(entry => !entry.listeners.size && !entry.state.dirty && !entry.state.saving && !entry.state.loading);
-  for (const entry of idle.slice(0, Math.max(0, entries.size - 20))) entries.delete(entry.id);
+  trimIdleDocuments(entries,{protectedEntry:entry=>entry.listeners.size||entry.state.dirty||entry.state.saving||entry.state.loading||entry.request||entry.refresh,onEvict:entry=>{clearTimeout(entry.timer);clearTimeout(entry.backupTimer);}});
 }
 function publish(entry, change) {
+  if(change.blocks&&change.blocks!==entry.state.blocks)entry.cacheBytes=estimateDocumentBytes(change.blocks);
   entry.state = { ...entry.state, ...change };
   for (const listener of entry.listeners) listener();
   for (const listener of listeners) listener();
@@ -37,8 +42,8 @@ export function memoEntry(id) {
       }
     });
   }
-  if (!entries.has(id)) entries.set(id, { id, state: empty, listeners: new Set(), request: null, load: null, timer: null, lastSavedAt: Date.now(),savedBlocks:[],documentPayload:{id} });
-  return entries.get(id);
+  if (!entries.has(id)) entries.set(id, { id, state: empty, listeners: new Set(), request: null, load: null, timer: null, lastSavedAt: Date.now(),lastBackupAt:Date.now(),savedBlocks:[],documentPayload:{id},cacheBytes:0 });
+  const entry=entries.get(id);entry.lastAccess=Date.now();return entry;
 }
 export function loadMemo(id) {
   const entry = memoEntry(id);
@@ -54,9 +59,9 @@ export function loadMemo(id) {
 export function changeMemo(id, blocks) {
   const entry = memoEntry(id);
   documentTiming(id,'input',entry.state.revision);publish(entry, { blocks, dirty: true, error: '' });
-  clearTimeout(entry.backupTimer);entry.backupTimer=setTimeout(()=>backup(entry),150);
+  scheduleBackup(entry);
   clearTimeout(entry.timer);
-  // Coalesce typing, but checkpoint at least every two seconds during long input.
+  // Coalesce typing; durable saves checkpoint within 600ms of sustained input.
   entry.timer = setTimeout(() => { void saveMemo(id).catch(() => {}); }, Math.min(120, Math.max(0, 600 - (Date.now() - entry.lastSavedAt))));
 }
 export async function saveMemo(id) {
@@ -71,7 +76,7 @@ export async function saveMemo(id) {
       documentTiming(id,'send',entry.state.revision);const doc = await window.desktop.memos.save({id,patch:documentPatch(entry.savedBlocks,blocks),ack:true,revision:entry.state.revision});entry.savedBlocks=blocks;documentTiming(id,'saved',doc.revision);
       entry.lastSavedAt = Date.now();
       publish(entry, { revision: doc.revision, recovered: false, dirty: entry.state.blocks !== blocks });
-      if (entry.state.dirty) backup(entry); else {clearTimeout(entry.backupTimer);localStorage.removeItem(draftKey(id));}
+      if (entry.state.dirty) scheduleBackup(entry); else {clearTimeout(entry.backupTimer);localStorage.removeItem(draftKey(id));}
     }
   })();
   try { await entry.request; publish(entry, { saving: false, error: '' }); }

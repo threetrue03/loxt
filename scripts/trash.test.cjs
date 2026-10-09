@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { Library } = require('../electron/library.cjs');
-test('folder deletion trashes descendants, preserves audio, restores at root, and permanent deletion survives restart', async () => {
+test('folder deletion preserves hierarchy and audio; partial restoration and permanent deletion survive restart', async () => {
   await fs.mkdir('test-results', { recursive: true }); const root = await fs.mkdtemp(path.resolve('test-results/trash-'));
   let library = new Library(root); await library.ready;
   await library.createFolder('회의'); await library.createFolder({name:'내부',parent:'회의'}); await library.createFolder('유지');
@@ -14,7 +14,7 @@ test('folder deletion trashes descendants, preserves audio, restores at root, an
   assert.equal(result.library.notes.find(n=>n.id===note.id).deleted,true); assert.equal(result.library.notes.find(n=>n.id===note.id).folder,'');
   assert.equal(await fs.readFile((await library.getAudio(note.id)).filename,'utf8'),'audio-original');
   library = new Library(root); await library.ready; assert.deepEqual((await library.list()).folders,['유지']);
-  const restored = await library.restoreTrash([note.id]); assert.equal(restored.notes.find(n=>n.id===note.id).deleted,false);
+  const restored = await library.restoreTrash([note.id]); assert.equal(restored.notes.find(n=>n.id===note.id).deleted,false);assert.equal(restored.notes.find(n=>n.id===note.id).folder,'회의/내부');const group=restored.notes.find(n=>n.kind==='folder');await library.restoreTrash([group.id]);
   await library.updateNote(note.id,{deleted:true}); await library.deleteTrash([note.id]);
   assert.equal((await library.list()).notes.length,1); await assert.rejects(fs.access(path.join(root,'recordings',note.id)));
   library = new Library(root); await library.ready; assert.deepEqual((await library.list()).notes.map(n=>n.id),[keep.id]);

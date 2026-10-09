@@ -5,11 +5,11 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 const require = createRequire(import.meta.url), { Library } = require('../electron/library.cjs'), { Memos } = require('../electron/memos.cjs'), { waveHeader } = require('../electron/pcm-wave.cjs');
-const out = path.resolve('test-results/memos-1.15.0'); await mkdir(out,{recursive:true}); const profile=await mkdtemp(path.join(out,'profile-'));
+const version=JSON.parse(await readFile(path.resolve('package.json'),'utf8')).version; const out = path.resolve('test-results/memos-'+version); await mkdir(out,{recursive:true}); const profile=await mkdtemp(path.join(out,'profile-'));
 const library=new Library(path.join(profile,'library')); await library.ready; const memos=new Memos(library);
 await library.createFolder({name:'회의 메모'}); const {note}=await memos.create('회의 메모'); await library.updateNote(note.id,{title:'프로젝트 메모'});
 const text = value => [{type:'text',text:value,styles:{}}], block=(type,content,extra={})=>({id:randomUUID(),type,content,children:[],...extra});
-const blocks=[block('heading',text('회의 정리'),{props:{level:1}}),block('paragraph',text('다음 회의에서 결정할 내용을 정리합니다.')),block('checkListItem',text('화면 구성 확인'),{props:{checked:true}}),block('toggleListItem',text('참고 사항'),{children:[block('paragraph',text('안쪽 메모'))]}),block('quote',text('사용자 흐름을 먼저 확인합니다.')),block('table',{type:'tableContent',rows:[{cells:[text('항목'),text('상태')]},{cells:[text('메모'),text('완료')]}]}),block('codeBlock',text('const memo = "LOXT";'),{props:{language:'javascript'}}),block('mathBlock',text('a^2+b^2=c^2')),block('paragraph',[...text('수식: '),{type:'math',content:text('E=mc^2')}]),block('paragraph',text('마지막 문단'))];
+const blocks=[block('heading',text('회의 정리'),{props:{level:1}}),block('heading',text('상세 일정'),{props:{level:4}}),block('paragraph',[{type:'text',text:'프로젝트 ',styles:{}},{type:'text',text:'회의',styles:{bold:true}},{type:'text',text:' 기록',styles:{}}]),block('paragraph',text('다음 회의에서 결정할 내용을 정리합니다.')),block('checkListItem',text('화면 구성 확인'),{props:{checked:true}}),block('toggleListItem',text('참고 사항'),{children:[block('paragraph',text('안쪽 메모'))]}),block('quote',text('사용자 흐름을 먼저 확인합니다.')),block('table',{type:'tableContent',rows:[{cells:[text('항목'),text('상태')]},{cells:[text('메모'),text('완료')]}]}),block('codeBlock',text('const memo = "LOXT";'),{props:{language:'javascript'}}),block('mathBlock',text('a^2+b^2=c^2')),block('paragraph',[...text('수식: '),{type:'math',content:text('E=mc^2')}]),block('paragraph',text('마지막 문단'))];
 blocks.splice(2,0,block('paragraph',[{type:'link',href:'https://example.com/',content:text('외부 링크 검증')}]));
 await memos.save({id:note.id,revision:0,blocks});
 const source=path.join(profile,'source.wav'); await writeFile(source,Buffer.concat([waveHeader(32000),Buffer.alloc(32000)])); const recording=(await library.importAudio(source,'')).note;
@@ -19,7 +19,7 @@ let app; const errors=[],results={profile,fixture:'Example blocks and an artific
 const executablePath=process.argv.slice(2).find(arg=>arg.endsWith('.exe'));
 try {
   app=await electron.launch({...(executablePath?{executablePath:path.resolve(executablePath),args:[]}:{args:['.']}),env}); const page=await app.firstWindow(); page.setDefaultTimeout(15000); page.on('pageerror',e=>errors.push(e.message));
-  results.version=(await page.evaluate(()=>window.desktop.getAppInfo())).version;assert.equal(results.version,'1.15.0');results.packaged=Boolean(executablePath);
+  results.version=(await page.evaluate(()=>window.desktop.getAppInfo())).version;assert.equal(results.version,version);results.packaged=Boolean(executablePath);
   await app.evaluate(async({clipboard})=>{globalThis.memoTestClipboard=await clipboard.readText();});
   const panel=()=>page.locator('.workspace-panel:not([hidden])');
   await app.evaluate(({BrowserWindow})=>{BrowserWindow.getAllWindows()[0].setSize(1400,900);BrowserWindow.getAllWindows()[0].show();});
@@ -30,7 +30,8 @@ try {
   await page.getByRole('textbox',{name:'메모 제목 변경'}).fill('새 메모 테스트');await page.getByRole('textbox',{name:'메모 제목 변경'}).press('Enter');
   const freshEditor=page.locator('.memo-editor .bn-editor');await freshEditor.waitFor();await freshEditor.click();await page.keyboard.type('# ');await page.keyboard.type('Markdown title');
   await page.waitForFunction(async id=>(await window.desktop.memos.get(id)).blocks.some(b=>b.type==='heading'),fresh);results.markdownInput=true;
-  await page.keyboard.press('Enter');await page.keyboard.type('/image');await page.keyboard.press('Enter');
+  await page.keyboard.press('Enter');await page.keyboard.type('#### ');await page.waitForFunction(()=>Boolean(document.querySelector('.memo-editor h4')));await page.keyboard.press('Escape');await page.waitForFunction(()=>[...document.querySelectorAll('.memo-editor [data-content-type="paragraph"]')].some(el=>/^####\s*$/.test(el.textContent)));results.h4InputRuleUndo=true;
+  await page.keyboard.press('Home');await page.keyboard.press('Shift+End');await page.keyboard.press('Backspace');await page.keyboard.type('/image');await page.keyboard.press('Enter');
   const png=path.join(out,'tiny.png');await writeFile(png,Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j1ioAAAAASUVORK5CYII=','base64'));
   await page.locator('input[type="file"]').setInputFiles(png);await page.waitForFunction(async id=>(await window.desktop.memos.get(id)).blocks.some(b=>b.type==='image'&&b.props.url?.startsWith('loxt-asset:')),fresh);
   try { await page.waitForFunction(()=>[...document.querySelectorAll('.memo-editor img')].some(img=>img.complete&&img.naturalWidth>0)); } catch(e) { results.imageDiagnostics=await page.evaluate(()=>({dom:document.querySelector('.memo-editor').innerHTML,doc:window.ProseMirror?.getJSON(),transactions:window.memoTransactions}));throw e; } results.imageUpload=true;
@@ -44,18 +45,21 @@ try {
   await panel().getByRole('button',{name:'내 보관함',exact:true}).click(); await panel().locator('.folder-card').filter({hasText:'회의 메모'}).click();
   await panel().getByRole('button',{name:'프로젝트 메모 열기',exact:true}).click(); await page.locator('.memo-editor .bn-editor').waitFor(); await capture('memo-dark');
   await app.evaluate(({shell})=>{shell.openExternal=async url=>{globalThis.memoTestOpenedLink=url;};});
-  await page.getByRole('link',{name:'외부 링크 검증',exact:true}).hover();await page.getByRole('button',{name:'링크 열기',exact:true}).click();assert.equal(await app.evaluate(()=>globalThis.memoTestOpenedLink==='https://example.com/'),true);results.externalLink=true;
-  await page.locator('.memo-editor h1').hover();await page.getByRole('button',{name:'블록 메뉴 열기',exact:true}).click();await page.getByText('블록 복제',{exact:true}).waitFor();await capture('block-menu-dark');await page.getByText('블록 복제',{exact:true}).click();
-  await page.waitForFunction(async id=>(await window.desktop.memos.get(id)).blocks.filter(b=>b.type==='heading').length===2,note.id);results.duplicateBlock=true;
-  await page.locator('.memo-editor h1').last().hover();await page.getByRole('button',{name:'블록 메뉴 열기',exact:true}).click();await page.getByText('블록 유형 변경',{exact:true}).hover();await page.getByRole('menuitem',{name:'본문',exact:true}).click();
-  await page.waitForFunction(async id=>(await window.desktop.memos.get(id)).blocks.filter(b=>b.type==='heading').length===1,note.id);results.blockTypeChange=true;
+  await page.getByRole('link',{name:'외부 링크 검증',exact:true}).click();assert.equal(await app.evaluate(()=>globalThis.memoTestOpenedLink==='https://example.com/'),true);results.externalLink=true;
+  assert.equal(await page.getByRole('button',{name:'블록 메뉴 열기',exact:true}).count(),0);results.blockMenuHidden=true;
+  await page.getByRole('button',{name:'메모 목차',exact:true}).click();await page.getByRole('complementary',{name:'메모 목차',exact:true}).waitFor();
+  await page.locator('.memo-outline-title').filter({hasText:'상세 일정'}).click();assert.equal(await page.locator('.memo-editor h4').count(),1);results.h4AndOutline=true;
+  await capture('memo-outline-dark');await page.getByRole('button',{name:'목차 닫기',exact:true}).click();assert.equal(await page.getByRole('button',{name:'메모 목차',exact:true}).getAttribute('aria-expanded'),'false');
+  await page.getByRole('button',{name:'메모에서 찾기',exact:true}).click();const search=page.getByRole('textbox',{name:'메모 검색어'});await search.fill('프로젝트 회의');
+  await page.waitForFunction(()=>document.querySelector('.memo-search')?.textContent.includes('1개'));await search.press('Enter');assert.match(await page.locator('.memo-search').innerText(),/1 \/ 1/);results.formattedSearch=true;results.firstSearchResult=true;
+  await search.press('Escape');
   await page.locator('.memo-editor [data-content-type="codeBlock"] .shiki').first().waitFor();results.syntaxHighlighting=true;
   await page.locator('.memo-editor [data-content-type="codeBlock"] .bn-inline-content').click();await page.getByRole('button',{name:'편집 도구',exact:true}).click();await page.getByRole('menuitem',{name:'코드 복사',exact:true}).click();
   assert.equal(await app.evaluate(async({clipboard})=>(await clipboard.readText()).includes('const memo = "LOXT"')),true);results.codeCopy=true;
   await app.evaluate(async({clipboard})=>{await clipboard.writeText(globalThis.memoTestClipboard);delete globalThis.memoTestClipboard;});
   results.render={table:await page.locator('.memo-editor table').count(),math:await page.locator('.memo-editor math').count(),code:await page.locator('.memo-editor [data-content-type="codeBlock"]').count()};
   assert.equal(results.render.table,1);assert.ok(results.render.math>=2);assert.equal(results.render.code,1);
-  await page.getByRole('button',{name:'메모에서 찾기',exact:true}).click();await page.getByRole('textbox',{name:'메모 검색어'}).fill('메모');assert.match(await page.locator('.memo-search').innerText(),/\/ [1-9]/);
+  await page.getByRole('button',{name:'메모에서 찾기',exact:true}).click();await page.getByRole('textbox',{name:'메모 검색어'}).fill('메모');await page.waitForFunction(()=>/^[1-9]/.test(document.querySelector('.memo-search span')?.textContent||''));await page.getByRole('textbox',{name:'메모 검색어'}).press('Enter');assert.match(await page.locator('.memo-search').innerText(),/\/ [1-9]/);
   const editable=page.locator('.memo-editor .bn-editor'); await editable.click();await page.keyboard.press('Control+End');await page.keyboard.press('End');await page.keyboard.type(' autosave');
   await page.waitForFunction(async id=>JSON.stringify((await window.desktop.memos.get(id)).blocks).includes('autosave'),note.id);
   results.autosave=true;
@@ -68,13 +72,13 @@ try {
   await app.evaluate(({dialog},out)=>{dialog.showSaveDialog=async(_window,options)=>({canceled:false,filePath:process.getBuiltinModule('path').join(out,options.defaultPath)});},out);
   for(const name of ['Markdown (.md)','HTML','PDF']){await page.getByRole('button',{name:'메모 내보내기',exact:true}).click();await page.getByRole('menuitem',{name,exact:true}).click();await page.waitForFunction(()=>!document.querySelector('.memo-tools button:disabled'));}
   await page.waitForFunction(()=>document.querySelector('.memo-save-status')?.textContent==='저장됨');
-  results.exports={};for(const ext of ['md','html','pdf']){const bytes=await readFile(path.join(out,'프로젝트 메모.'+ext));results.exports[ext]=bytes.length;if(ext==='pdf')assert.equal(bytes.subarray(0,4).toString(),'%PDF');}
+  results.exports={};for(const ext of ['md','html','pdf']){const bytes=await readFile(path.join(out,'프로젝트 메모.'+ext));results.exports[ext]=bytes.length;if(ext==='pdf')assert.equal(bytes.subarray(0,4).toString(),'%PDF');if(ext==='md')assert.match(bytes.toString('utf8'),/#### 상세 일정/);}
   await panel().getByRole('button',{name:'홈',exact:true}).click();await panel().getByRole('button',{name:'내 보관함',exact:true}).click();await panel().getByRole('button',{name:'녹음 예시 열기',exact:true}).click();
   await page.getByRole('button',{name:'메모 열기',exact:true}).click();await page.locator('.memo-panel .bn-editor').waitFor();await page.locator('.memo-panel .bn-editor').click();await page.keyboard.type('녹음에 붙는 메모');
   await page.waitForFunction(async id=>JSON.stringify((await window.desktop.memos.get(id)).blocks).includes('녹음에 붙는 메모'),recording.id);
   await capture('attached-light');await page.getByRole('button',{name:'메모 닫기',exact:true}).click();await page.getByRole('button',{name:'메모 열기',exact:true}).click();assert.match(await page.locator('.memo-panel .bn-editor').innerText(),/녹음에 붙는 메모/);results.attachedPanel=true;
   await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(900,680));await capture('attached-narrow');
-  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth),false);results.narrow=true;
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth),false);results.narrow=true;await page.getByRole('button',{name:'메모 목차',exact:true}).click();await page.locator('.memo-outline-overlay').waitFor();await capture('memo-outline-narrow');await page.getByRole('button',{name:'목차 닫기',exact:true}).press('Escape');assert.equal(await page.getByRole('button',{name:'메모 목차',exact:true}).evaluate(el=>document.activeElement===el),true);results.narrowOutlineAndEscape=true;
   await page.locator('.memo-panel .bn-editor').click();await page.keyboard.press('Control+End');await page.keyboard.type(' close-flush');
   const storagePath=(await page.evaluate(()=>window.desktop.getLibrary())).storagePath;const closed=app.waitForEvent('close');await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].close());await closed;app=null;
   const reopened=new Library(storagePath);await reopened.ready;assert.ok(reopened.data.notes.some(n=>n.id===note.id&&n.kind==='memo'));assert.match(JSON.stringify((await new Memos(reopened).read(note.id)).blocks),/retry/);results.reopen=true;
