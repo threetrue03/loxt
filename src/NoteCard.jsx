@@ -1,3 +1,4 @@
+import {getFullNote} from './useFullNote.js';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Icon from './Icon.jsx';
 import InlineName from './InlineName.jsx';
@@ -25,7 +26,7 @@ export default function NoteCard({ note, selected, onOpen, onMenu, editing, onRe
     {selectable ? <label className="note-selection" onContextMenu={event => event.stopPropagation()}><input type="checkbox" aria-label={`${note.title} 선택`} checked={checked} disabled={selectionDisabled} onChange={event => onCheck(event.target.checked)}/></label> : null}
     <div className="note">
     <OpenTag className="note-open" onClick={editing ? undefined : onOpen} aria-label={editing ? undefined : `${note.title} 열기`}>
-      <div className="file-icon"><Icon name={note.done ? 'file' : 'mic'}/></div>
+      <div className="file-icon"><Icon name={note.documentType==='drawing'?'pen':note.done?'file':'mic'}/></div>
       <div className="note-summary">
         <div className="note-title">{editing ? <InlineName value={note.title} label={note.kind === 'memo' ? '메모 이름 바꾸기' : '녹음 이름 바꾸기'} onSave={onRename} onCancel={onCancelRename}/> : note.title}</div>
         <div className="note-folder"><Icon name="folder"/><span>{note.folder || '내 보관함'}</span>{note.recovered ? <span className="recovered-label">복구된 녹음</span> : null}</div>
@@ -50,8 +51,10 @@ function ScriptPreview({ note, saved }) {
     observer.observe(region.current); return () => observer.disconnect();
   }, []);
   useEffect(() => { saved.current.limit = limit; }, [limit]);
-  const segments = note.segments || [];
-  return <div ref={region} className="note-preview" role="region" aria-label={`${note.title} ${note.kind === 'memo' ? '메모' : '스크립트'} 미리보기`} tabIndex={note.kind === 'memo' || segments.length ? 0 : undefined} onFocus={() => setLimit(value => Math.max(value, 8))} onScroll={event => { const element = event.currentTarget; saved.current.top = element.scrollTop; if (element.scrollHeight - element.scrollTop - element.clientHeight < 60) setLimit(value => Math.min(segments.length, value + 12)); }}>
-    {note.kind === 'pdf' ? <p className="memo-preview">{note.pdfPreview || `PDF · ${note.pages}쪽`}</p> : note.kind === 'memo' ? <p className="memo-preview">{note.memoPreview || '메모를 열어 내용을 작성하세요.'}</p> : !['queued','transcribing'].includes(note.status) && segments.length ? <>{segments.slice(0, limit).map((segment, i) => <div className="preview-segment" key={i}><span>{formatTime(segment.start)}</span><p>{segment.text}</p></div>)}{limit < segments.length ? <button className="preview-more secondary" onClick={() => setLimit(value => Math.min(segments.length, value + 12))}>스크립트 더 보기</button> : null}</> : <div className="preview-empty"><Icon name="mic"/><strong>{note.done ? '인식된 음성이 없습니다' : '음성을 기록했습니다'}</strong><p>{note.done ? '원본 녹음을 재생해 확인하세요.' : '변환하면 이곳에 내용이 표시됩니다.'}</p></div>}
+  const [full,setFull]=useState(null),[loading,setLoading]=useState(false),[error,setError]=useState('');
+  const segments = full?.id===note.id&&full.updatedRevision===note.updatedRevision?full.segments:note.segments||[];
+  async function more(){if(loading)return;if(note._summary&&segments.length<(note.segmentCount||0)){setLoading(true);try{setFull(await getFullNote(note,region.current.closest('[data-workspace]')?.dataset.workspace||'work'));setLimit(v=>v+12);}catch(e){setError(e.message);}finally{setLoading(false);}}else setLimit(value=>Math.min(segments.length,value+12));}
+  return <div ref={region} className="note-preview" role="region" aria-label={`${note.title} ${note.kind === 'memo' ? '메모' : '스크립트'} 미리보기`} tabIndex={note.kind === 'memo' || segments.length ? 0 : undefined} onFocus={() => setLimit(value => Math.max(value, 8))} onScroll={event => { const element = event.currentTarget; saved.current.top = element.scrollTop; if (element.scrollHeight - element.scrollTop - element.clientHeight < 60) more(); }}>
+    {note.kind === 'pdf' ? <p className="memo-preview">{note.pdfPreview || `PDF · ${note.pages}쪽`}</p> : note.kind === 'memo' ? <p className="memo-preview">{note.memoPreview || '메모를 열어 내용을 작성하세요.'}</p> : !['queued','transcribing'].includes(note.status) && segments.length ? <>{segments.slice(0, limit).map((segment, i) => <div className="preview-segment" key={i}><span>{formatTime(segment.start)}</span><p>{segment.text}</p></div>)}{limit < (note.segmentCount||segments.length) ? <button className="preview-more secondary" disabled={loading} onClick={more}>{loading?"불러오는 중…":"스크립트 더 보기"}</button> : null}{error?<p role="alert">{error}</p>:null}</> : <div className="preview-empty"><Icon name="mic"/><strong>{note.done ? '인식된 음성이 없습니다' : '음성을 기록했습니다'}</strong><p>{note.done ? '원본 녹음을 재생해 확인하세요.' : '변환하면 이곳에 내용이 표시됩니다.'}</p></div>}
   </div>;
 }

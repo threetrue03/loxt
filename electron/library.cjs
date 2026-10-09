@@ -63,6 +63,7 @@ class Library {
     this.onChange = () => {};
     this.data = { version: 1, folders: [], notes: [] };
     this.queue = Promise.resolve();
+    this.documents = new Map();this.metadataRevisions=new Map();
     this.ready = this.initialize();
   }
   enqueue(work) {
@@ -153,7 +154,7 @@ class Library {
       }
       const current = this.data.notes.findIndex(n => n.id === note.id);
       if (current < 0) { this.data.notes.unshift(note); changed = true; }
-      else if (JSON.stringify(this.data.notes[current]) !== JSON.stringify(note)) { this.data.notes[current] = note; changed = true; }
+      else if (JSON.stringify(this.data.notes[current]) !== JSON.stringify(note)) { const previous=this.data.notes[current];this.data.notes[current]=note; if(!previous._summary||JSON.stringify(previous)!==JSON.stringify(require('../shared/library-summary.cjs').summary(note)))changed=true; }
     }
     if (recovery) {
       const available = [];
@@ -173,7 +174,7 @@ class Library {
     }
     return { ...data, folderParents: parents };
   }
-  async saveIndex(data, backup = true) {
+  async saveIndex(data, backup = true, notify = true) {
     this.validateIndex(data);
     if (backup) {
       try {
@@ -183,13 +184,40 @@ class Library {
       } catch (error) { if (error.code !== 'ENOENT' && ['EACCES', 'ENOSPC', 'EPERM'].includes(error.code)) throw error; }
     }
     data.revision = ++this.revision; data.recovery = this.recovery || null;
-    await atomicJson(this.index, data);
-    queueMicrotask(() => this.onChange(this.revision));
+    await atomicJson(this.index, require('../shared/library-summary.cjs').lightResult(data));
+    if(notify)this.emitChange({kind:'library'});
   }
   snapshot() {
     return JSON.parse(JSON.stringify({ ...this.data, revision: this.revision, recovery: this.recovery, storagePath: this.root }));
   }
-  list() { return this.enqueue(() => this.snapshot()); }
+  async list() { await this.ready; return this.snapshot(); }
+  async listSummary() { await this.ready; return require('../shared/library-summary.cjs').lightResult({...this.data,revision:this.revision,recovery:this.recovery,storagePath:this.root,indexError:this.indexError||null}); }
+  async detail(id) { await this.ready; const note=this.data.notes.find(n=>n.id===id); if(!note)throw new Error('문서를 찾지 못했습니다.'); return JSON.parse(JSON.stringify(note)); }
+  emitChange(change) { const revision=this.revision; setImmediate(()=>this.onChange(revision,change)); }
+  document(id, work) {
+    const previous=this.documents.get(id)||Promise.resolve();
+    const next=previous.catch(()=>{}).then(()=>this.ready).then(work);
+    this.documents.set(id,next); next.finally(()=>{if(this.documents.get(id)===next)this.documents.delete(id);}).catch(()=>{});return next;
+  }
+  documentChanged(id,kind,doc,changes) {
+    // A durable document is acknowledged independently of unrelated metadata work.
+    this.metadataRevisions.set(kind+':'+id,doc.revision);
+    const original=this.data.notes.find(n=>n.id===id)||this.sessions.get(id)?.note;
+    this.revision++;
+    if(original&&!original.deleted){const updated={...original,...changes,updatedRevision:this.revision};this.data={...this.data,notes:[updated,...this.data.notes.filter(n=>n.id!==id)]};}
+    this.emitChange({id,kind,documentRevision:doc.revision});
+    const save=()=>this.enqueue(async()=>{if(this.metadataRevisions.get(kind+':'+id)!==doc.revision)return;const current=this.data.notes.find(n=>n.id===id)||this.sessions.get(id)?.note;if(current&&!current.deleted)await this.saveNote({...current,...changes},true);});
+    const retry=attempt=>save().catch(error=>{this.indexError='본문은 저장됐지만 목록 갱신을 마치지 못했습니다. '+error.message;this.emitChange({id,kind:'library',error:this.indexError});if(attempt<3){const timer=setTimeout(()=>retry(attempt+1),1000*attempt);timer.unref?.();}});
+    retry(1);return doc;
+  }
+  scheduleIndex() {
+    this.indexDirty=true;this.indexSince ||= Date.now();clearTimeout(this.indexTimer);
+    this.indexTimer=setTimeout(()=>this.flushIndex().catch(error=>{this.indexError=error.message;this.emitChange({kind:'library',error:this.indexError});}),Math.min(500,Math.max(0,1500-(Date.now()-this.indexSince))));this.indexTimer.unref?.();
+  }
+  flushIndex() {
+    clearTimeout(this.indexTimer);
+    return this.enqueue(async()=>{if(!this.indexDirty)return;await this.saveIndex(this.data,true,false);this.indexDirty=false;this.indexSince=0;this.indexError='';});
+  }
   validateFolder(folder) {
     if (folder !== '' && !this.data.folders.includes(folder)) throw new Error('저장할 폴더를 다시 선택해 주세요.');
     return folder;
@@ -249,11 +277,13 @@ class Library {
       return { library: this.snapshot(), renamed: Object.fromEntries([...mapped].filter(([old, value]) => old !== value)) };
     });
   }
-  async saveNote(note) {
+  async saveNote(note, deferred = false) {
+    note={...note,updatedRevision:this.revision+1};
     await atomicJson(path.join(this.recordings, note.id, 'note.json'), note);
     const next = { ...this.data, notes: [note, ...this.data.notes.filter(n => n.id !== note.id)] };
-    await this.saveIndex( next); this.data = next;
-    return this.snapshot();
+    if(deferred){this.data=next;this.revision++;this.scheduleIndex();this.emitChange({id:note.id,kind:'metadata',note:require('../shared/library-summary.cjs').summary(note)});}
+    else {await this.saveIndex(next);this.data=next;}
+    return deferred ? undefined : this.snapshot();
   }
   folderSubtree(folder) {
     this.validateFolder(folder);
@@ -311,7 +341,7 @@ class Library {
   }
   deleteTrash(ids) {
     return this.enqueue(async () => {
-      this.trashNotes(ids);
+      this.trashNotes(ids);if(ids.some(id=>this.documents.has(id)))throw new Error('문서 저장을 마친 뒤 삭제해 주세요.');
       const selected = new Set(ids), next = { ...this.data, notes: this.data.notes.filter(note => !selected.has(note.id)) };
       const journal = { version: 1, data: next, ids };
       await atomicJson(path.join(this.root, 'trash-delete.json'), journal); this.trashDeletePending = true;
@@ -439,8 +469,8 @@ class Library {
       // .part 파일은 삭제하지 않습니다. 다음 실행 시 저장된 부분을 복구합니다.
     });
   }
-  importAudio(filename, folder, metadata) {
-    return this.enqueue(async () => {
+  async importAudio(filename, folder, metadata) {
+      await this.ready;
       const ext = path.extname(filename).toLowerCase();
       if (!MIME[ext]) throw new Error('지원하지 않는 오디오 파일 형식입니다.');
       const source = await fs.stat(filename);
@@ -455,12 +485,9 @@ class Library {
       const directory = path.join(this.recordings, note.id);
       await fs.mkdir(directory);
       const partial = path.join(directory, note.audioFile + '.part');
-      await atomicJson(path.join(directory, 'note.json'), note);
       await fs.copyFile(filename, partial);
       await fs.rename(partial, path.join(directory, note.audioFile));
-      const library = await this.saveNote(note);
-      return { library, note };
-    });
+      return this.enqueue(async()=>{this.validateFolder(note.folder);const library=await this.saveNote(note);return {library,note};});
   }
   updateNote(id, changes, expected) {
     return this.enqueue(async () => {

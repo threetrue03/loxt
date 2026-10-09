@@ -1,3 +1,4 @@
+import {documentPending,registerDocumentFlusher} from './documentPending.js';
 // Saves survive panel closure and navigation. Bodies stay outside the library index.
 const entries = new Map();
 const empty = { loading: true, blocks: null, revision: 0, dirty: false, saving: false, error: '' };
@@ -16,17 +17,18 @@ function publish(entry, change) {
   entry.state = { ...entry.state, ...change };
   for (const listener of entry.listeners) listener();
   for (const listener of listeners) listener();
-  window.desktop?.memos?.pending([...entries.values()].filter(e => e.state.dirty || e.state.saving).map(e => e.id));
+  documentPending('memo',[...entries.values()].filter(e=>e.state.dirty||e.state.saving).map(e=>e.id));
   trimCache();
 }
 export function memoEntry(id) {
   if (!installed && window.desktop?.memos) {
-    installed = true; window.desktop.memos.onFlush(flushMemos);
-    window.desktop.onLibraryChange(() => {
-      for (const entry of entries.values()) if (!entry.state.dirty && !entry.state.saving && !entry.state.loading) {
+    installed=true;registerDocumentFlusher('memo',flushMemos);
+    window.desktop.onLibraryChange(event => {
+      if(event.kind&&event.kind!=='memo'&&!event.resync)return;
+      for (const entry of entries.values()) if ((!event.id||entry.id===event.id) && !entry.state.dirty && !entry.state.saving && !entry.state.loading) {
         window.desktop.memos.get(entry.id).then(doc => {
           if (!entry.state.dirty && !entry.state.saving && doc.revision > entry.state.revision) publish(entry, doc);
-        }).catch(() => {});
+        }).catch(error => publish(entry, { error: error.message }));
       }
     });
     window.addEventListener('beforeunload', event => {
@@ -51,7 +53,7 @@ export function loadMemo(id) {
 export function changeMemo(id, blocks) {
   const entry = memoEntry(id);
   publish(entry, { blocks, dirty: true, error: '' });
-  backup(entry);
+  clearTimeout(entry.backupTimer);entry.backupTimer=setTimeout(()=>backup(entry),150);
   clearTimeout(entry.timer);
   // Coalesce typing, but checkpoint at least every two seconds during long input.
   entry.timer = setTimeout(() => { void saveMemo(id).catch(() => {}); }, Math.min(250, Math.max(0, 2000 - (Date.now() - entry.lastSavedAt))));
@@ -68,7 +70,7 @@ export async function saveMemo(id) {
       const doc = await window.desktop.memos.save({ id, blocks, revision: entry.state.revision });
       entry.lastSavedAt = Date.now();
       publish(entry, { revision: doc.revision, recovered: false, dirty: entry.state.blocks !== blocks });
-      if (entry.state.dirty) backup(entry); else localStorage.removeItem(draftKey(id));
+      if (entry.state.dirty) backup(entry); else {clearTimeout(entry.backupTimer);localStorage.removeItem(draftKey(id));}
     }
   })();
   try { await entry.request; publish(entry, { saving: false, error: '' }); }
@@ -90,3 +92,5 @@ export function downloadMemoDraft(id) {
   const link = document.createElement('a'); link.href = url; link.download = 'LOXT-메모-초안.json'; link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+registerDocumentFlusher('memo',flushMemos);

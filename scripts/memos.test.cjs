@@ -16,7 +16,7 @@ test('memo bodies persist, recover from an index loss and follow folder/trash op
   assert.equal(library.data.notes[0].memoPreview, '한글 메모 내용'); assert.equal(library.data.notes[0].audioFile, undefined);
   await assert.rejects(library.getAudio(note.id)); await assert.rejects(library.setTranscription(note.id,{status:'queued'}));
   await library.renameFolder({folder:'회의',name:'새 회의'}); assert.equal(library.data.notes[0].folder,'새 회의');
-  await fs.unlink(library.index); const next = new Library(root); await next.ready; assert.equal(next.data.notes[0].id,note.id);
+  await library.flushIndex(); await fs.unlink(library.index); const next = new Library(root); await next.ready; assert.equal(next.data.notes[0].id,note.id);
   const store = new Memos(next); assert.equal(plainText((await store.read(note.id)).blocks),'한글 메모 내용');
   await next.deleteFolder('새 회의'); assert.equal(next.data.notes[0].deleted,true); await assert.rejects(store.save({id:note.id,revision:1,blocks:block('삭제된 메모')}));
   await next.restoreTrash([note.id]); assert.equal(next.data.notes[0].folder,'');

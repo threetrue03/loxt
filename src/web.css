@@ -9,7 +9,7 @@ html[data-connection=offline] body:before{content:'PC 연결이 끊겼습니다.
 .web-recording-recovery{position:fixed;bottom:16px;left:80px;z-index:350;width:min(420px,calc(100vw - 96px));max-height:45vh;overflow:auto;padding:16px;border:1px solid var(--line);border-radius:8px;background:var(--theme-surface-control)}.web-recording-recovery>div{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.web-recording-recovery>div>span{width:100%;overflow-wrap:anywhere}
 
 @media(max-width:900px){
- .mobile-navigation{grid-column:1;grid-row:3;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));padding:6px max(8px,env(safe-area-inset-right)) max(6px,env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left));background:var(--side);border-top:1px solid var(--line)}
+ .mobile-navigation{grid-column:1;grid-row:3;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));padding:6px max(8px,env(safe-area-inset-right)) max(6px,env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left));background:var(--side);border-top:1px solid var(--line)}
  .mobile-navigation button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:48px;border-radius:8px;color:var(--muted);font-size:11px}
  .mobile-navigation svg{width:20px;height:20px}.mobile-navigation button[aria-current=page]{color:var(--ink);background:var(--theme-surface-2b2b2a)}
  .mobile-library-tools{display:flex;justify-content:flex-end;padding:12px 14px 0}.mobile-library-tools button{display:flex;align-items:center;gap:6px;font-size:12px}.mobile-library-tools svg{width:16px;height:16px}
@@ -17,3 +17,6 @@ html[data-connection=offline] body:before{content:'PC 연결이 끊겼습니다.
  body:has(.mobile-navigation) .web-transfer,body:has(.mobile-navigation) .web-recording-recovery{bottom:calc(80px + env(safe-area-inset-bottom))}
  .workspace-main .app>.main .settings-panel{padding:20px 14px}
 }
+.web-connect-form{margin:24px 0 12px;display:flex;flex-direction:column;gap:10px}.web-connect-form label{font-size:13px;font-weight:550}.web-connect-form input{width:100%;min-width:0;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--theme-surface-control);font:inherit;font-size:14px;color:var(--ink)}.web-connect-form .hint{font-size:12px;margin:0}.web-connect-form .error-message{margin:0;overflow-wrap:anywhere}.web-connect-form .error-message[hidden]{display:none}.web-connect-form button{align-self:flex-start;margin-top:4px}.web-connect .web-connect-retry{margin-top:4px}.web-connect{width:min(100%,528px);margin:10vh auto;max-height:80vh;overflow:auto}
+html,body{touch-action:pan-x pan-y}
+@media(pointer:coarse){input,select,textarea,.web-connect-form input{font-size:16px}}

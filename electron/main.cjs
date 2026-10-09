@@ -124,7 +124,7 @@ function createWindow() {
     if (relocating) { event.preventDefault(); return; }
     const changingData = youtube?.hasJobs || (live?.busy && live.state.stage !== 'ready') || conversions?.hasJobs || transcriber?.requestId || (transcriber?.busy && !['detect', 'live'].includes(transcriber.operation));
     if (!library?.sessions.size && !workspaceLibraries?.live.sessions.size && !changingData) {
-      if (memoCloseAllowed || !memoPending) return;
+      if (memoCloseAllowed) return;
       event.preventDefault(); if (memoClosing) return; memoClosing = true;
       try {
         const token = require('node:crypto').randomUUID();
@@ -133,7 +133,7 @@ function createWindow() {
           memoFlushReply = value => { if (value?.token !== token) return; clearTimeout(timeout); memoFlushReply = null; value.error ? reject(new Error(value.error)) : resolve(); };
           mainWindow.webContents.send('memos:flush', token);
         });
-        await Promise.all([library.queue, workspaceLibraries.live.queue]); memoCloseAllowed = true; mainWindow.close();
+        await Promise.all([library.flushIndex(), workspaceLibraries.live.flushIndex()]); memoCloseAllowed = true; mainWindow.close();
       } catch (error) { await dialog.showMessageBox(mainWindow, { type: 'error', title: '메모 저장 실패', message: error.message, detail: '작성 내용을 유지했습니다. 메모에서 다시 시도한 뒤 닫아 주세요.', buttons: ['돌아가기'] }); }
       finally { memoClosing = false; }
       return;
@@ -158,7 +158,7 @@ function handle(channel, work) {
   ipcMain.handle(channel, (event, payload) => {
     if (!isTrusted(event.senderFrame)) throw new Error('허용되지 않은 요청입니다.');
     if (relocating && !['browser:command', 'appearance:get', 'preferences:get'].includes(channel)) throw new Error('보관함 이전 중입니다. 완료 후 다시 시도해 주세요.');
-    return work(payload);
+    return Promise.resolve(work(payload)).then(require('../shared/library-summary.cjs').lightResult);
   });
 }
 function refreshBlocker() {
@@ -254,7 +254,8 @@ handle('transcription:import-model', async () => {
     return transcriber.importModel(result.filePaths[0]);
   });
 });
-handle('library:list', () => library.list());
+handle('library:list', () => library.listSummary());
+handle('library:detail', p => workspaceLibraries.get(p?.workspace).detail(p?.id));
 handle('browser:command', payload => browserTabs?.command(payload));
 handle('library:manage', async payload => {
   const store = workspaceLibraries.get(payload?.workspace);
@@ -262,22 +263,7 @@ handle('library:manage', async payload => {
   if (live?.busy && (payload.ids?.includes(live.state.id) || payload.folders?.some(f => live.state.folder === f || live.state.folder?.startsWith(f + '/')))) throw new Error('Live 녹음을 종료한 뒤 기록을 변경해 주세요.');
   return libraryActions[payload.workspace].run(payload);
 });
-handle('library:search', async payload => {
-  const store = workspaceLibraries.get(payload?.workspace), data = await store.list();
-  if (typeof payload.query !== 'string' || payload.query.length > 500 || !['title', 'content', 'both'].includes(payload.field)) throw new Error('검색 조건을 확인해 주세요.');
-  const q = payload.query.toLocaleLowerCase('ko'); const matches = [];
-  for (const note of data.notes.filter(n => !n.deleted && n.folder === (payload.folder || ''))) {
-    if (payload.field !== 'content' && note.title.toLocaleLowerCase('ko').includes(q)) { matches.push(note.id); continue; }
-    if (payload.field !== 'title') {
-      let text = note.segments.map(s => s.text).join(' ') + ' ' + (note.kind==='pdf' ? await pdfFor(payload.workspace).text(note.id) : '');
-      if (note.kind === 'memo' || note.hasMemo) {
-        const doc = await new Memos(store).read(note.id); const parts = []; const walk = value => { if (typeof value?.text === 'string') parts.push(value.text); if (value && typeof value === 'object') Object.values(value).forEach(v => { if (v && typeof v === 'object') walk(v); }); }; walk(doc.blocks); text += ' ' + parts.join(' ');
-      }
-      if (text.toLocaleLowerCase('ko').includes(q)) matches.push(note.id);
-    }
-  }
-  return matches;
-});
+handle('library:search', p => require('./library-search.cjs').searchLibrary(workspaceLibraries.get(p?.workspace),p));
 handle('settings:library-root', () => ({ root: libraryLocation.root, changing: relocating }));
 handle('settings:move-library', async () => {
   requireNoConversions(); if(deviceServer?.running)throw new Error('내 기기 연결을 끈 뒤 저장 위치를 변경해 주세요.'); if (pendingMemoIds.size || library.sessions.size || workspaceLibraries.live.sessions.size || youtube?.hasJobs) throw new Error('녹음·메모 저장·변환을 마친 뒤 저장 위치를 변경해 주세요.');
@@ -297,6 +283,9 @@ function memoFor(id) {
   return new Memos(stores[0]);
 }
 const pdfFor = workspace => new (require('./pdfs.cjs').PDFs)(workspaceLibraries.get(workspace));
+handle('pdf:create',p=>pdfFor(p.workspace).create(p.folder||''));
+handle('pdf:info',p=>pdfFor(p.workspace).info(p.id));
+handle('pdf:prepare-index',p=>pdfFor(p.workspace).prepareIndex(p.id));
 handle('pdf:import', async payload => {
   if (payload?.bytes) return pdfFor(payload.workspace).import(payload.bytes,payload.name,payload.folder || '');
   const result=await dialog.showOpenDialog(mainWindow,{title:'PDF 불러오기',properties:['openFile'],filters:[{name:'PDF',extensions:['pdf']}]});
@@ -304,6 +293,7 @@ handle('pdf:import', async payload => {
   const file=result.filePaths[0], bytes=await require('node:fs/promises').readFile(file);
   return pdfFor(payload.workspace).import(bytes,path.basename(file),payload.folder || '');
 });
+handle('pdf:search-index', p=>pdfFor(p.workspace).searchIndex(p.id));
 handle('pdf:index', payload=>pdfFor(payload.workspace).index(payload));
 handle('pdf:get', payload => pdfFor(payload.workspace).read(payload.id));
 handle('pdf:save', payload => pdfFor(payload.workspace).save(payload));
@@ -355,7 +345,7 @@ handle('workspace:library', payload => {
   const store = workspaceLibraries.get(payload?.workspace);
   if (live?.busy && (payload?.id === live.state.id || payload?.ids?.includes(live.state.id)) && ['update-note', 'move-notes', 'restore-trash', 'delete-trash'].includes(payload?.action)) throw new Error('Live 녹음을 종료한 뒤 기록을 변경해 주세요.');
   switch (payload?.action) {
-    case 'list': return store.list();
+    case 'list': return store.listSummary();
     case 'import': return dialog.showOpenDialog(mainWindow, { properties: ['openFile', 'multiSelections'], filters: [{ name: '오디오', extensions: ['wav','mp3','m4a','webm','ogg','flac','mp4'] }] }).then(result => result.canceled ? { canceled: true } : importLiveFiles(store, result.filePaths, payload.folder || ''));
     case 'retry-import': {
       const pending = liveImportFailures.get(payload.batch);
@@ -366,7 +356,7 @@ handle('workspace:library', payload => {
     case 'create-folder': return store.createFolder({ name: payload.name, parent: payload.parent });
     case 'rename-folder': return store.renameFolder({ folder: payload.folder, name: payload.name });
     case 'delete-folder': return store.deleteFolder(payload.folder);
-    case 'update-note': return store.updateNote(payload.id, payload.changes || {});
+    case 'update-note': return store.updateNote(payload.id, payload.changes || {}, payload.changes?.expected);
     case 'move-notes': return store.moveNotes({ ids: payload.ids, folder: payload.folder });
     case 'restore-trash': return store.restoreTrash(payload.ids);
     case 'delete-trash': return store.deleteTrash(payload.ids);
@@ -395,7 +385,7 @@ handle('transcript:copy', async id => {
   clipboard.writeText((await import('../shared/transcript.js')).serializeTranscript(note.segments));
   return true;
 });
-handle('library:update-note', payload => { if (payload?.changes?.deleted && pendingMemoIds.has(payload.id)) throw new Error('메모 저장을 마친 뒤 휴지통으로 이동해 주세요.'); return library.updateNote(payload?.id, payload?.changes || {}); });
+handle('library:update-note', payload => { if (payload?.changes?.deleted && pendingMemoIds.has(payload.id)) throw new Error('메모 저장을 마친 뒤 휴지통으로 이동해 주세요.'); return library.updateNote(payload?.id, payload?.changes || {},payload?.changes?.expected); });
 handle('library:move-notes', payload => library.moveNotes(payload));
 handle('recording:discard', async id => {
   if (conversions.snapshot().queue.some(job => job.id === id)) throw new Error('변환 중인 녹음은 버릴 수 없습니다.');
@@ -504,7 +494,7 @@ app.whenReady().then(async () => {
   });
   conversions.liveLibrary = workspaceLibraries.live;
   conversions.defaults = workspace => preferences.snapshot()[workspace].model;
-  for (const workspace of ['work', 'live']) workspaceLibraries.get(workspace).onChange = revision => { deviceServer?.event('library',{workspace,revision}); if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('library:changed', { workspace, revision }); };
+  for (const workspace of ['work', 'live']) workspaceLibraries.get(workspace).onChange = (revision,change={}) => { const event={workspace,revision,...change};deviceServer?.event('library',event);if(mainWindow&&!mainWindow.isDestroyed())mainWindow.webContents.send('library:changed',event); };
   youtube = new YouTubeImports({ root: path.join(app.getPath('userData'), 'youtube-imports'), executable: app.isPackaged ? path.join(process.resourcesPath, 'youtube', 'yt-dlp.exe') : path.join(__dirname, '../.runtime/youtube/yt-dlp.exe'), library, queue: conversions, notify: state => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('youtube:state', state);
     refreshBlocker();
@@ -515,7 +505,7 @@ app.whenReady().then(async () => {
     deviceServer?.event('live',state);
     refreshBlocker();
   }, event => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('live:meter', event); });
-  live.notifyPatch = patch => { deviceServer?.event('live',live.snapshot()); if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('live:patch', patch); };
+  live.notifyPatch = patch => { deviceServer?.event('live-patch',patch); if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('live:patch', patch); };
   protocol.handle('sorinote-audio', audioResponse);
   protocol.handle('loxt-asset', async request => {
     try { const asset = await memoFor(new URL(request.url).pathname.split('/')[1]).asset(request.url); return new Response(request.method === 'HEAD' ? null : Readable.toWeb(createReadStream(asset.filename)), { headers: { 'Content-Type': asset.mime, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Access-Control-Allow-Origin': developmentUrl || 'null' } }); }
@@ -530,4 +520,4 @@ app.whenReady().then(async () => {
 });
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
-app.on('will-quit', () => { deviceServer?.stop().catch(()=>{}); youtube?.shutdown(); systemAudio?.shutdown(); transcriber?.auxiliary.shutdown(); live?.shutdown(); conversions?.shutdown(); });
+app.on('will-quit', () => { require('./pdf-jobs.cjs').stopPDFJobs(); deviceServer?.stop().catch(()=>{}); youtube?.shutdown(); systemAudio?.shutdown(); transcriber?.auxiliary.shutdown(); live?.shutdown(); conversions?.shutdown(); });

@@ -1,3 +1,5 @@
+import useFullNote from './useFullNote.js';
+import {refreshLibrary,subscribeLibrary} from './LibraryView.jsx';
 import PdfHost from './PdfHost.jsx';
 import MobileNavigation, { MobileLibraryTools } from './MobileNavigation.jsx';
 import { serializeTranscript } from '../shared/transcript.js';
@@ -70,7 +72,7 @@ export default function App({ workspaceActive = true, liveActive = false, onWork
   useEffect(() => { onBackgroundChange?.(Boolean((busy && draftOpen) || environment?.queue?.length || environment?.task || imports.length)); }, [busy, draftOpen, environment, imports.length, onBackgroundChange]);
   useEffect(() => { if (!workspaceActive) { setModal(null); setActionMenu(null); setCreatingFolder(null); setRenaming(null); } }, [workspaceActive]);
   const toastTimer = useRef(null);
-  const selected = notes.find(n => n.id === selectedId);
+  const selected = useFullNote(notes.find(n => n.id === selectedId),'work');
   const { recent, remember } = useRecentNotes('work', notes);
   function openNote(id) { remember(id); setSelectedId(id); setView('workspace'); }
   const closeModal = useCallback(() => setModal(null), []);
@@ -84,7 +86,7 @@ export default function App({ workspaceActive = true, liveActive = false, onWork
       if (!active) return;
       setImports(state.jobs);
       if (state.completed) {
-        window.desktop.getLibrary().then(data => { if (active) applyLibrary(data); }).catch(() => {});
+        refreshLibrary('work').then(data => { if (active) applyLibrary(data); }).catch(() => {});
         if (state.completed.error) toast(state.completed.error);
       }
     };
@@ -103,7 +105,7 @@ export default function App({ workspaceActive = true, liveActive = false, onWork
     async function initialize() {
       if (!window.desktop) return;
       try {
-        const [info, initial] = await Promise.all([window.desktop.getAppInfo(), window.desktop.getLibrary()]);
+        const [info, initial] = await Promise.all([window.desktop.getAppInfo(), refreshLibrary('work')]);
         if (!active) return;
         let data = initial;
         // 1단계에서 사용자가 만든 폴더만 실제 보관함으로 옮깁니다.
@@ -129,7 +131,7 @@ export default function App({ workspaceActive = true, liveActive = false, onWork
       setEnvironment(state);
     };
     const unsubscribe = window.desktop.onTranscriptionState(receive);
-    const offLibrary = window.desktop.onLibraryChange(event => { if (event.workspace === 'work') window.desktop.getLibrary().then(data => { if (active) applyLibrary(data); }).catch(() => {}); });
+    const offLibrary=subscribeLibrary('work',data=>{if(active)applyLibrary(data);});
     window.desktop.getTranscriptionEnvironment().then(receive).catch(() => { if (active) toast('변환 환경을 확인하지 못했습니다. 설정에서 다시 확인해 주세요.'); });
     return () => { active = false; unsubscribe(); offLibrary(); };
   }, [applyLibrary]);
@@ -154,7 +156,7 @@ export default function App({ workspaceActive = true, liveActive = false, onWork
     catch { toast('작업을 취소하지 못했습니다. 다시 시도해 주세요.'); }
   }
   async function startTranscription(id, options) {
-    try { setEnvironment(await window.desktop.startTranscription(id, options)); applyLibrary(await window.desktop.getLibrary()); }
+    try { setEnvironment(await window.desktop.startTranscription(id, options)); applyLibrary(await refreshLibrary('work')); }
     catch (error) { toast(error.message); }
   }
   function toast(message) {

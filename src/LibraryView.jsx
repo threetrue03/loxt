@@ -1,3 +1,4 @@
+import useFullNote from './useFullNote.js';
 import PdfHost from './PdfHost.jsx';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -19,23 +20,15 @@ import { useSettings } from './SettingsProvider.jsx';
 import { serializeTranscript } from '../shared/transcript.js';
 
 export function libraryApi(mode) { return mode === 'live' ? window.desktop.live : window.desktop; }
-const lists = new Map(), listeners = new Map(), pending = new Map(); let subscribed = false;
-export async function refreshLibrary(mode) {
-  if (pending.has(mode)) return pending.get(mode);
-  const request = libraryApi(mode).getLibrary().then(data => { if ((lists.get(mode)?.revision ?? -1) <= (data.revision ?? 0)) { lists.set(mode, data); listeners.get(mode)?.forEach(fn => fn(data)); } return data; }).finally(() => pending.delete(mode));
-  pending.set(mode, request); return request;
+const lists=new Map(),listeners=new Map(),pending=new Map(),generation=new Map();let subscribed=false;
+function installLibraryEvents(){if(subscribed)return;subscribed=true;window.desktop.onLibraryChange(event=>{if(!event.workspace)return;if(event.kind==='pdf'||event.kind==='memo')return;if(event.kind==='metadata'&&event.note&&lists.has(event.workspace)){const old=lists.get(event.workspace);const data={...old,revision:event.revision,notes:[event.note,...old.notes.filter(n=>n.id!==event.id)]};lists.set(event.workspace,data);listeners.get(event.workspace)?.forEach(fn=>fn(data));return;}generation.set(event.workspace,(generation.get(event.workspace)||0)+1);refreshLibrary(event.workspace).catch(()=>{});});}
+export function subscribeLibrary(mode,fn){installLibraryEvents();if(!listeners.has(mode))listeners.set(mode,new Set());listeners.get(mode).add(fn);if(lists.has(mode))fn(lists.get(mode));return()=>listeners.get(mode)?.delete(fn);}
+export async function refreshLibrary(mode){
+ installLibraryEvents();if(pending.has(mode))return pending.get(mode);
+ const request=(async()=>{let data;do{const token=generation.get(mode)||0;data=await libraryApi(mode).getLibrary();if((lists.get(mode)?.revision??-1)<=(data.revision??0)){lists.set(mode,data);listeners.get(mode)?.forEach(fn=>fn(data));}if(token===(generation.get(mode)||0))break;}while(true);return data;})();
+ pending.set(mode,request);try{return await request;}finally{if(pending.get(mode)===request)pending.delete(mode);}
 }
-export function useLibraryData(mode) {
-  const [data, setData] = useState(() => lists.get(mode) || { notes: [], folders: [], folderParents: {} });
-  const [error, setError] = useState('');
-  useEffect(() => {
-    if (!subscribed) { subscribed = true; window.desktop.onLibraryChange(event => { refreshLibrary(event.workspace).catch(() => {}); }); }
-    if (!listeners.has(mode)) listeners.set(mode, new Set()); listeners.get(mode).add(setData);
-    refreshLibrary(mode).catch(e => setError(e.message));
-    return () => listeners.get(mode).delete(setData);
-  }, [mode]);
-  return { data, error };
-}
+export function useLibraryData(mode){const [data,setData]=useState(()=>lists.get(mode)||{notes:[],folders:[],folderParents:{}}),[error,setError]=useState('');useEffect(()=>{setError('');const off=subscribeLibrary(mode,setData);refreshLibrary(mode).catch(e=>setError(e.message));return off;},[mode]);return {data,error:error||data.indexError||''};}
 const filterNames = { library: '모든 기록', recent: '최근 기록', trash: '휴지통' };
 export default function LibraryView({ mode, folder: controlled, onNavigate, onOpen, onRecord, onImport, onYouTube, renameTarget, onRenameEnd, state = {}, onState, active = true }) {
   const { data, error: loadError } = useLibraryData(mode), api = libraryApi(mode), settings = useSettings();
@@ -43,7 +36,7 @@ export default function LibraryView({ mode, folder: controlled, onNavigate, onOp
   const [environment, setEnvironment] = useState(null), [matched, setMatched] = useState(null), [queryBusy, setQueryBusy] = useState(false);
   const root = useRef(null), search = useRef(null), request = useRef(0), management = useRef(Promise.resolve()), localRef = useRef(local); localRef.current = local;
   const folder = controlled ?? local.folder ?? '', query = local.query || '', field = local.field || 'both', sort = local.sort || 'date', layout = local.layout || settings.preferences[mode].layout;
-  const selected = data.notes.find(n => n.id === local.id), special = Object.hasOwn(filterNames, folder);
+  const selected = useFullNote(data.notes.find(n => n.id === local.id),mode), special = Object.hasOwn(filterNames, folder);
   const change = values => setLocal(previous => ({ ...previous, ...values }));
   useEffect(() => { onState?.({ ...local, title: selected?.title }); }, [local, selected?.title]);
   useEffect(() => { if (renameTarget) setRenaming(renameTarget); }, [renameTarget]);
@@ -72,6 +65,7 @@ export default function LibraryView({ mode, folder: controlled, onNavigate, onOp
     management.current=task;setWorking(true);setError('');
     try { const result=await task;await refreshLibrary(mode);return result; } catch(error){setError(error.message);}finally{if(management.current===task)setWorking(false);}
   }
+  async function newDrawing() { const result=await run(()=>window.desktop.pdf.create({workspace:mode,folder:special?'':folder}));if(result?.note)open(result.note.id); }
   async function importPDF() { const result=await run(()=>window.desktop.pdf.import({workspace:mode,folder:special ? '' : folder})); if(result?.note)open(result.note.id); }
   async function newMemo() { const result = await run(() => window.desktop.memos.create(special ? '' : folder, mode)); if (result?.note) open(result.note.id); }
   async function importFiles() {
@@ -114,7 +108,7 @@ export default function LibraryView({ mode, folder: controlled, onNavigate, onOp
       await run(async () => window.desktop.pdf.import({ workspace: mode, folder: special ? '' : folder, name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) }));
     }
   }
-  const addItems = close => <><button role="menuitem" onClick={() => { close(); setCreating(true); }}><Icon name="folder"/>폴더</button><div className="action-menu-divider" role="separator"/>{!(mode === 'live' && window.desktop.remote) && <button role="menuitem" onClick={() => { close(); onRecord?.(mode, special ? '' : folder); }}><Icon name="mic"/>새 녹음</button>}<button role="menuitem" onClick={() => { close(); newMemo(); }}><Icon name="file"/>새 메모</button>{!(mode === "live" && window.desktop.remote) && <button role="menuitem" onClick={() => { close(); importFiles(); }}><Icon name="upload"/>불러오기</button>}<button role="menuitem" onClick={() => { close(); importPDF(); }}><Icon name="file"/>PDF 불러오기</button>{mode === 'work' && !window.desktop.remote ? <button role="menuitem" onClick={() => { close(); if(onYouTube)onYouTube(folder);else setModal({action:'youtube'}); }}><Icon name="youtube"/>YouTube 불러오기</button> : null}</>;
+  const addItems = close => <><button role="menuitem" onClick={() => { close(); setCreating(true); }}><Icon name="folder"/>폴더</button><div className="action-menu-divider" role="separator"/>{!(mode === 'live' && window.desktop.remote) && <button role="menuitem" onClick={() => { close(); onRecord?.(mode, special ? '' : folder); }}><Icon name="mic"/>새 녹음</button>}<button role="menuitem" onClick={() => { close(); newMemo(); }}><Icon name="file"/>새 메모</button>{!(mode === "live" && window.desktop.remote) && <button role="menuitem" onClick={() => { close(); importFiles(); }}><Icon name="upload"/>불러오기</button>}<button role="menuitem" onClick={() => { close(); importPDF(); }}><Icon name="file"/>PDF 불러오기</button><button role="menuitem" onClick={() => { close(); newDrawing(); }}><Icon name="pen"/>그리기</button>{mode === 'work' && !window.desktop.remote ? <button role="menuitem" onClick={() => { close(); if(onYouTube)onYouTube(folder);else setModal({action:'youtube'}); }}><Icon name="youtube"/>YouTube 불러오기</button> : null}</>;
   return <div ref={root} className="library-view main" tabIndex={-1} data-library-workspace={mode} onDragOverCapture={event=>{if(event.dataTransfer.types.includes("Files")){event.preventDefault();event.stopPropagation();}}} onDropCapture={dropFiles} onScrollCapture={event => { if(event.target.classList.contains('transcript'))change({scriptScroll:event.target.scrollTop});else if(event.target.classList.contains('memo-scroll'))change({memoScroll:event.target.scrollTop}); }} onKeyDown={keys} onScroll={event => { if (event.target === root.current) change({ scroll: event.currentTarget.scrollTop }); }}>
     {selected ? selected.kind === 'pdf' ? <PdfHost note={selected} mode={mode} onBack={() => change({id:null})} onUpdate={changes => run(() => api.updateNote(selected.id,changes)).then(Boolean)}/> : selected.kind === 'memo' ? <MemoPage note={selected} onBack={() => change({id:null})} onUpdate={changes => run(() => api.updateNote(selected.id,changes)).then(Boolean)}/> : <NoteDetail note={selected} audioHost={mode === 'live' ? 'live' : 'recording'} workspaceActive={active} folders={data.folders} folderParents={data.folderParents} environment={environment} onBack={() => change({id:null})} onUpdate={changes => run(() => api.updateNote(selected.id,changes)).then(Boolean)} onCopy={() => mode === 'live' ? api.copyTranscript(selected.id) : window.desktop.copyTranscript(selected.id)} onExport={(format = 'txt') => window.desktop.exportTranscript({ format,format,title:selected.title,text:serializeTranscript(selected.segments,{time:true,title:selected.title}) })} onCancel={() => window.desktop.cancelTranscription(selected.id)} onConvert={options => window.desktop.startTranscription(selected.id,{workspace:mode,model:options.model})}/> : <section className="content library-page" onContextMenu={event => { if (folder === 'trash' || event.target.closest('button,input,[data-note-id],.inline-name,.memo-editor')) return; event.preventDefault(); setAddMenu({x:Math.max(8,Math.min(event.clientX,innerWidth-250)),y:Math.max(8,Math.min(event.clientY,innerHeight-270))}); }}>
       <div className="heading library-heading"><div className="heading-title">{special ? <h1>{filterNames[folder]}</h1> : <FolderBreadcrumb folder={folder} parents={data.folderParents} onOpen={navigate} editing={renaming?.type === 'folder' && renaming.id === folder} onRename={name => rename(renaming,name)} onCancelRename={() => {setRenaming(null);onRenameEnd?.();}} onStartRename={() => setRenaming({type:'folder',id:folder})} onMenu={(e,c) => actions(e,{type:'folder',id:folder},c)}/>}</div>

@@ -1,6 +1,9 @@
 // Some iOS Safari versions have ReadableStream.getReader, but no async iterator.
 // PDF.js 6 getTextContent uses `for await`; read its public text stream directly.
-export async function readPdfText(page) {
+const cache=new Map();
+export function forgetPdfText(){cache.clear();}
+export function readPdfText(page){if(cache.has(page))return cache.get(page);const request=collect(page).catch(e=>{cache.delete(page);throw e;});cache.set(page,request);while(cache.size>6)cache.delete(cache.keys().next().value);return request;}
+async function collect(page) {
   const reader = page.streamTextContent().getReader();
   const text = { items:[], styles:Object.create(null), lang:null };
   try {

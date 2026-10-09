@@ -1,0 +1,9 @@
+import {useEffect,useRef,useState} from 'react';
+import {createPortal} from 'react-dom';
+import Icon from './Icon.jsx';
+// Form controls are a dialog, not menuitems; arrows keep their native meaning.
+export default function PdfProperties({children}){
+ const [open,setOpen]=useState(false),button=useRef(null),panel=useRef(null);
+ useEffect(()=>{if(!open)return;const p=panel.current,b=button.current;const place=()=>{const r=b.getBoundingClientRect();p.style.left=Math.max(8,Math.min(r.left,innerWidth-p.offsetWidth-8))+'px';p.style.top=Math.max(8,Math.min(r.bottom+6,innerHeight-p.offsetHeight-8))+'px';};place();const observer=new ResizeObserver(place);observer.observe(p);const outside=e=>{if(!p.contains(e.target)&&!b.contains(e.target))setOpen(false);};const keys=e=>{if(e.key==='Escape'){e.stopPropagation();setOpen(false);b.focus();}if(e.key==='Tab'){const items=[...p.querySelectorAll('button,input,select')].filter(n=>!n.disabled);if(!items.length)return;const at=items.indexOf(document.activeElement);if(e.shiftKey&&at<=0||!e.shiftKey&&at===items.length-1){e.preventDefault();items[e.shiftKey?items.length-1:0].focus();}}};document.addEventListener('pointerdown',outside);p.addEventListener('keydown',keys);p.querySelector('input,button,select')?.focus();return()=>{observer.disconnect();document.removeEventListener('pointerdown',outside);p.removeEventListener('keydown',keys);};},[open]);
+ return <><button ref={button} aria-haspopup="dialog" aria-expanded={open} aria-label="필기 옵션" onClick={()=>setOpen(v=>!v)}><Icon name="settings"/></button>{open?createPortal(<div ref={panel} role="dialog" aria-label="필기 옵션" className="pdf-properties unified-menu">{children}<button onClick={()=>{setOpen(false);button.current?.focus();}}>닫기</button></div>,button.current?.closest('.document-fullscreen')||document.body):null}</>;
+}

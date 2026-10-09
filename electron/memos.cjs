@@ -27,7 +27,7 @@ function validateBlocks(blocks) {
   }
   urls(blocks); return blocks;
 }
-function plainText(blocks) {
+function plainText(blocks, limit = 2000) {
   const parts = [];
   function walk(value) {
     if (!value || typeof value !== 'object') return;
@@ -35,7 +35,7 @@ function plainText(blocks) {
     if (value.type === 'tableContent') for (const row of value.rows || []) walk(row);
     else for (const [key, child] of Object.entries(value)) if (['content','children','cells'].includes(key) || Array.isArray(value)) walk(child);
   }
-  walk(blocks); return parts.join(' ').slice(0, 2000);
+  walk(blocks); return parts.join(' ').slice(0, limit);
 }
 class Memos {
   constructor(library) { this.library = library; }
@@ -73,7 +73,7 @@ class Memos {
     }
   }
   save(payload) {
-    return this.library.enqueue(async () => {
+    return this.library.document(payload?.id, async () => {
       const note = this.note(payload?.id, true), current = await this.read(note.id);
       if (payload.revision !== current.revision) throw new Error('다른 화면에서 메모가 변경되었습니다. 다시 열어 내용을 확인해 주세요.');
       const blocks = validateBlocks(payload.blocks);
@@ -82,8 +82,7 @@ class Memos {
       await atomicJson(path.join(this.directory(note.id), 'memo.json.backup'), { version: 1, revision: current.revision, updatedAt: current.updatedAt, blocks: current.blocks });
       await atomicJson(path.join(this.directory(note.id), 'memo.json'), doc);
       // A durable body save is authoritative even if the optional index preview fails.
-      try { await this.library.saveNote({ ...note, hasMemo: true, editedAt: doc.updatedAt, memoPreview: note.kind === 'memo' ? plainText(blocks) : note.memoPreview }); } catch { /* reopening reads the body directly */ }
-      return doc;
+      return this.library.documentChanged(note.id,'memo',doc,{hasMemo:true,editedAt:doc.updatedAt,memoPreview:note.kind==='memo'?plainText(blocks):note.memoPreview});
     });
   }
   attach(payload) {

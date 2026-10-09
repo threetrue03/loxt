@@ -1,9 +1,9 @@
 {
-  "version": "2.1.0",
+  "version": "2.3.0",
   "examples": true,
   "liveInference": false,
   "exampleAudio": "silent WAV and scripted transcript/speaker data; not accuracy or speed measurements",
-  "capturedAt": "2026-10-08T12:28:31.468Z",
+  "capturedAt": "2026-10-09T02:50:52.038Z",
   "images": [
     {
       "file": "sidebar-collapsed-work.png",
@@ -150,16 +150,66 @@
       "scenario": "pdf-reading-annotations"
     },
     {
+      "file": "pdf-fullscreen.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "pdf-document-fullscreen"
+    },
+    {
+      "file": "pdf-properties.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "pdf-tool-properties"
+    },
+    {
+      "file": "pdf-search.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "pdf-search-results"
+    },
+    {
+      "file": "drawing.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "work-independent-drawing"
+    },
+    {
       "file": "light-pdf.png",
       "width": 1783,
       "height": 1079,
       "scenario": "pdf-reading-annotations-light"
     },
     {
+      "file": "light-drawing.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "work-independent-drawing-light"
+    },
+    {
+      "file": "memo-fullscreen.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "memo-document-fullscreen"
+    },
+    {
       "file": "device-settings.png",
       "width": 1783,
       "height": 1079,
       "scenario": "personal-device-connection"
+    },
+    {
+      "file": "web-connection.png",
+      "width": 1280,
+      "height": 900,
+      "scenario": "web-connection-address-reentry",
+      "example": true
+    },
+    {
+      "file": "mobile-connection.png",
+      "width": 390,
+      "height": 844,
+      "scenario": "mobile-connection-address-reentry",
+      "example": true
     },
     {
       "file": "mobile-home.png",

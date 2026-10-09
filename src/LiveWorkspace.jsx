@@ -1,3 +1,5 @@
+import useFullNote from './useFullNote.js';
+import {refreshLibrary,subscribeLibrary} from './LibraryView.jsx';
 import PdfHost from './PdfHost.jsx';
 import MobileNavigation, { MobileLibraryTools } from './MobileNavigation.jsx';
 import { serializeTranscript } from '../shared/transcript.js';
@@ -31,7 +33,7 @@ export default function LiveWorkspace({ active, workActive, returnToRecording, o
   const [library, setLibraryState] = useState({ notes: [], folders: [], folderParents: {}, storagePath: '' });
   const libraryRevision = useRef(-1);
   const setLibrary = useCallback(data => { if (data.revision != null && data.revision < libraryRevision.current) return; libraryRevision.current = data.revision ?? libraryRevision.current; setLibraryState(data); }, []);
-  useEffect(() => window.desktop.onLibraryChange(event => { if (event.workspace === 'live') window.desktop.live.getLibrary().then(setLibrary).catch(() => {}); }), [setLibrary]);
+  useEffect(()=>subscribeLibrary('live',setLibrary),[setLibrary]);
   const [loaded, setLoaded] = useState(false), [filter, setFilter] = useState('all');
   const sharedSettings = useSettings();
   const [collapsed, setCollapsed] = useState(false);
@@ -50,13 +52,13 @@ export default function LiveWorkspace({ active, workActive, returnToRecording, o
   const [environment, setEnvironment] = useState(null);
   useEffect(() => { const receive = value => { setEnvironment(value);  }; window.desktop.getTranscriptionEnvironment().then(receive).catch(() => {}); return window.desktop.onTranscriptionState(receive); }, []);
   const liveBusy = !['idle', 'done', 'ready'].includes(liveState.stage);
-  const selected = library.notes.find(note => note.id === selectedId);
+  const selected=useFullNote(library.notes.find(note=>note.id===selectedId),'live');
   const { recent, remember } = useRecentNotes('live', library.notes);
   function openNote(id) { remember(id); if (active) setSettings(false); setSelectedId(id); setRecordView(true); }
   useEffect(() => { if (returnToRecording) { setSettings(false); setSelectedId(null); setRecordView(true); } }, [returnToRecording]);
   useEffect(() => { onBackgroundChange?.(liveBusy); }, [liveBusy, onBackgroundChange]);
   useEffect(() => {
-    let mounted = true; const receive = value => { if (!mounted) return; setLiveState(value); if (value.stage === 'done') window.desktop.live.getLibrary().then(data => { if (mounted) setLibrary(data); }).catch(() => {}); };
+    let mounted = true; const receive = value => { if (!mounted) return; setLiveState(value); if (value.stage === 'done') refreshLibrary('live').then(data => { if (mounted) setLibrary(data); }).catch(() => {}); };
     window.desktop.live.getState().then(receive).catch(() => {}); const off = window.desktop.live.onState(receive); const offPatch = window.desktop.live.onPatch(patch => { if (mounted) setLiveState(value => value.id !== patch.id ? value : ({ ...value, ...patch.state, segments: [...value.segments, ...patch.append] })); }); return () => { mounted = false; off(); offPatch(); };
   }, []);
   const timer = useRef(null);

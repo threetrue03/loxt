@@ -9,7 +9,7 @@ $paths = $logo.SelectNodes('//svg:path', $namespaces)
 [IO.Directory]::CreateDirectory($assetRoot) | Out-Null
 [IO.Directory]::CreateDirectory($publicRoot) | Out-Null
 $images = @()
-foreach ($size in @(16,24,32,48,64,128,256)) {
+foreach ($size in @(16,24,32,48,64,128,180,192,256,512)) {
   $bitmap = [Drawing.Bitmap]::new($size,$size)
   $graphics = [Drawing.Graphics]::FromImage($bitmap)
   $graphics.SmoothingMode = [Drawing.Drawing2D.SmoothingMode]::AntiAlias
@@ -29,8 +29,10 @@ foreach ($size in @(16,24,32,48,64,128,256)) {
   $bitmap.Save($memory,[Drawing.Imaging.ImageFormat]::Png)
   $png = $memory.ToArray(); $images += ,@($size,$png)
   if ($size -eq 256) { [IO.File]::WriteAllBytes((Join-Path $publicRoot 'icon.png'),$png) }
+  if ($size -in @(180,192,512)) { [IO.File]::WriteAllBytes((Join-Path $publicRoot ('loxt-' + $size + '.png')),$png) }
   $memory.Dispose(); $graphics.Dispose(); $bitmap.Dispose()
 }
+$images = @($images | Where-Object { $_[0] -le 256 -and $_[0] -notin @(180,192) })
 $writer = [IO.BinaryWriter]::new([IO.File]::Create((Join-Path $assetRoot 'icon.ico')))
 $writer.Write([UInt16]0); $writer.Write([UInt16]1); $writer.Write([UInt16]$images.Count)
 $offset = 6 + 16 * $images.Count

@@ -26,7 +26,7 @@ for (const filename of await readdir('electron')) {
   if (!asar.extractFile(archive, `electron/${filename}`).equals(await readFile(path.join('electron', filename)))) throw new Error(`Packaged source mismatch: ${filename}`);
 }
 for (const filename of await readdir('shared')) {
-  if (!filename.endsWith('.js')) continue;
+  if (!/\.(js|cjs)$/.test(filename)) continue;
   if (!asar.extractFile(archive, `shared/${filename}`).equals(await readFile(path.join('shared', filename)))) throw new Error(`Packaged shared source mismatch: ${filename}`);
 }
 for (const filename of await readdir('python')) {

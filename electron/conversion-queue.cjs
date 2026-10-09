@@ -15,6 +15,7 @@ class ConversionQueue {
   }
   emit() { this.notify(this.snapshot()); }
   changed() {
+    this.environmentAt=0;
     this.emit();
     if (this.active?.started && !this.engine.busy) { this.active = null; this.emit(); }
     if (!this.active && this.waiting.length && !this.engine.busy) this.kick();
@@ -65,7 +66,7 @@ class ConversionQueue {
     }
     return this.snapshot();
   }
-  async environment() { if (!this.paused) await this.engine.detect(); return this.snapshot(); }
+  async environment() { if(this.paused)return this.snapshot();if(this.environmentRequest)return this.environmentRequest;if(this.environmentAt&&Date.now()-this.environmentAt<3000)return this.snapshot();this.environmentRequest=this.engine.detect().then(()=>{this.environmentAt=Date.now();return this.snapshot();}).finally(()=>{this.environmentRequest=null;});return this.environmentRequest; }
   pause() { this.paused = true; this.emit(); }
   resume() { this.paused = false; this.emit(); this.kick(); }
   shutdown() { this.closed = true; this.engine.shutdown(); }

@@ -7,6 +7,7 @@ test('site personal URL: LAN HTTPS only and never persist pairing fragments',asy
   assert.ok(first.endsWith('#pair='+'a'.repeat(48)));assert.equal(base,`https://${host}:1234/web.html`);
  }
  assert.equal(connectionURL('https://192.168.0.1:1234/').base,'https://192.168.0.1:1234/web.html');
+ assert.throws(()=>connectionURL('https://192.168.0.1:1234/web.html',{requirePair:true}),/#pair/);assert.ok(connectionURL('https://192.168.0.1:1234/web.html#pair='+'b'.repeat(48),{requirePair:true}).first.endsWith('b'.repeat(48)));
  for(const value of ['javascript:alert(1)','http://192.168.0.1:1234/web.html','https://example.com/web.html','https://192.168.1.999/web.html','https://172.32.1.1/web.html','https://user:pass@10.0.0.1/web.html','https://10.0.0.1/api/session','https://10.0.0.1/web.html?token=secret','https://10.0.0.1/web.html#other=secret','not a URL'])assert.throws(()=>connectionURL(value));
 });
 test('copyable pairing address lifecycle: QR token, expiration renewal, stopped addresses cleared',async()=>{
