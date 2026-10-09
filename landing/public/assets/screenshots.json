@@ -1,9 +1,10 @@
 {
-  "version": "2.5.0",
+  "version": "2.6.0",
   "examples": true,
   "liveInference": false,
+  "modelCatalogExamples": true,
   "exampleAudio": "silent WAV and scripted transcript/speaker data; not accuracy or speed measurements",
-  "capturedAt": "2026-10-09T07:13:07.459Z",
+  "capturedAt": "2026-10-09T11:43:52.051Z",
   "images": [
     {
       "file": "sidebar-collapsed-work.png",
@@ -136,6 +137,24 @@
       "width": 1783,
       "height": 1079,
       "scenario": "work-independent-memo-light"
+    },
+    {
+      "file": "model-store.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "work-model-store"
+    },
+    {
+      "file": "model-roles.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "model-roles-alias-tags-dialog"
+    },
+    {
+      "file": "light-model-store.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "work-model-store-light"
     },
     {
       "file": "home.png",

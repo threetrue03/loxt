@@ -85,7 +85,7 @@ def run(python, args, notify, protocol=False):
     return events
 
 
-def prepare(root, runtime, names, requested_device, notify, models_verified=False, prepare_auxiliary=True, transient=False):
+def prepare(root, runtime, names, requested_device, notify, models_verified=False, prepare_auxiliary=True, transient=False, model_source=None):
     root, runtime = root.resolve(), runtime.resolve()
     root.mkdir(parents=True, exist_ok=True)
     notify('engine-start', message='다른 변환·설치 작업을 확인하는 중')
@@ -98,20 +98,33 @@ def prepare(root, runtime, names, requested_device, notify, models_verified=Fals
         external = read_json(root / 'external-models.json', [])
         if not isinstance(external, list) or any(not isinstance(item, dict) or not re.fullmatch(r'external-[a-f0-9-]{36}', item.get('id', '')) for item in external):
             raise ValueError('외부 모델 목록이 올바르지 않습니다.')
-        available = MODELS | {item['id'] for item in external}
+        store = read_json(root / 'store-models.json', [])
+        if not isinstance(store, list) or any(not isinstance(item, dict) or not re.fullmatch(r'store-[a-f0-9]{24}|tiny|base|small|medium|large-v3-turbo|large-v3', item.get('id', '')) for item in store):
+            raise ValueError('스토어 모델 목록이 올바르지 않습니다.')
+        available = MODELS | {item['id'] for item in external} | {item['id'] for item in store}
+        if model_source:
+            if not transient or len(names) != 1 or not re.fullmatch(r'store-[a-f0-9]{24}|tiny|base|small|medium|large-v3-turbo|large-v3', names[0]):
+                raise ValueError('검사할 모델을 확인해 주세요.')
+            if model_source.is_symlink():
+                raise ValueError('연결된 모델 검사 위치는 사용할 수 없습니다.')
+            model_source = model_source.resolve()
+            if model_source.parent != (root / 'models').resolve() or not model_source.name.startswith('stage-') or model_source.is_symlink():
+                raise ValueError('모델 검사 위치를 확인해 주세요.')
+            available.add(names[0])
         settings, device, existing = selection(names, original, requested_device, gpu, available)
         # A repair must validate the user's active model too when already installed.
         active = root / 'models' / settings['model']
         if settings['model'] not in names and all((active / filename).is_file() for filename in ['model.bin', 'config.json', 'tokenizer.json']):
             names = [*names, settings['model']]
         notify('hardware', device=device, gpu=gpu, model=settings['model'])
-        if not models_verified:
+        if not models_verified and not model_source:
             from install_models import install
-            builtin = [name for name in names if name in MODELS]
+            pinned = {item['id'] for item in store}
+            builtin = [name for name in names if name in MODELS and name not in pinned]
             if builtin:
                 install(root / 'models', builtin, notify)
             for name in names:
-                if name not in MODELS and not all((root / 'models' / name / filename).is_file() for filename in ['model.bin', 'config.json', 'tokenizer.json']):
+                if (name not in MODELS or name in pinned) and not all((root / 'models' / name / filename).is_file() for filename in ['model.bin', 'config.json', 'tokenizer.json']):
                     raise RuntimeError('외부 모델 파일이 없습니다. 모델 보관함에서 다시 불러와 주세요.')
         notify('engine-start', message='앱 전용 Python 환경 준비 중')
         base = root / 'python-base-3.13.16'
@@ -146,7 +159,7 @@ def prepare(root, runtime, names, requested_device, notify, models_verified=Fals
             validations.setdefault('medium:cuda:int8_float16', prepared['checkedAt'])
         for index, name in enumerate(names, 1):
             notify('validation-start', model=name, device=device, index=index, total=len(names))
-            args = ['--model-dir', root / 'models' / name, '--model', name, '--device', device, '--parent-pid', os.getpid()]
+            args = ['--model-dir', model_source if model_source and name == names[0] else root / 'models' / name, '--model', name, '--device', device, '--parent-pid', os.getpid()]
             events = run(python, [RESOURCES / 'worker.py', 'probe', *args], notify, True)
             supported = next((data['compute_types'] for kind, data in events if kind == 'probe'), [])
             compute = next((value for value in PREFERENCES[device] if value in supported), None)
@@ -174,11 +187,12 @@ def main():
     parser.add_argument('--skip-auxiliary', action='store_true')
     parser.add_argument('--transient', action='store_true')
     parser.add_argument('--parent-pid', type=int, default=0)
+    parser.add_argument('--model-source', type=Path)
     args = parser.parse_args()
     watch_parent(args.parent_pid)
     from downloads import emit
     try:
-        prepare(args.root, args.runtime, list(dict.fromkeys(args.models.split(','))), args.device, emit, prepare_auxiliary=not args.skip_auxiliary, transient=args.transient)
+        prepare(args.root, args.runtime, list(dict.fromkeys(args.models.split(','))), args.device, emit, prepare_auxiliary=not args.skip_auxiliary, transient=args.transient, model_source=args.model_source)
     except Exception as error:
         emit('error', message=str(error))
         return 1

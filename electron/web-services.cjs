@@ -1,6 +1,6 @@
 const fs=require('node:fs/promises'),path=require('node:path'),{randomUUID}=require('node:crypto');
 const {Memos,plainText}=require('./memos.cjs'),{PDFs}=require('./pdfs.cjs');
-function webServices({libraries,actions,conversions,preferences,root,dist,BrowserWindow,isBusy,getLiveState,onRecordingChange}){
+function webServices({modelStore,modelPending,libraries,actions,conversions,preferences,root,dist,BrowserWindow,isBusy,getLiveState,onRecordingChange}){
  const exports=new Map(),recordings=new Map(),clientActions=new Map();
  const exportRoot=path.resolve(root),previewRoot=path.join(root,'pdf-previews');let previewReady;
  async function preparePreviews(){await fs.mkdir(previewRoot,{recursive:true});if((await fs.lstat(previewRoot)).isSymbolicLink())throw Error('PDF 캐시 경로를 확인해 주세요.');for(const name of await fs.readdir(previewRoot)){if(!/^[a-f0-9-]{36}\.(png|jpg)$/.test(name))continue;const file=path.join(previewRoot,name);if((await fs.lstat(file)).isFile())await fs.unlink(file).catch(()=>{});}}
@@ -15,11 +15,14 @@ function webServices({libraries,actions,conversions,preferences,root,dist,Browse
   if(method==='liveState')return getLiveState();
   if(method==='environment'){const state=await conversions.environment();if(conversions.engine?.modelList){state.models=await conversions.engine.modelList();state.modelsChecked=true;}return state;}
   if(method==='preferences')return {...preferences.snapshot(),migrated:true};
+  if(method==='model-store.list'&&modelStore)return modelStore.list(p);
+  if(method==='model-store.search'&&modelStore)return modelStore.search(p);
+  if(method==='model-store.detail'&&modelStore)return modelStore.detail(p.repo);
   if(method==='search')return require('./library-search.cjs').searchLibrary(store(p.workspace),p);
   if(method==='audio.detach'){if(isBusy?.({...p,ids:[p.id]})||conversions?.snapshot().queue.some(job=>job.id===p.id))throw Error('현재 작업을 마친 뒤 원본을 삭제해 주세요.');return store(p.workspace).detachAudio(p.id);}
   if(method==='manage'){if(isBusy?.(p))throw new Error('현재 작업을 마친 뒤 변경해 주세요.');const key=context.device+':'+p.workspace;if(!clientActions.has(key))clientActions.set(key,new (require('./library-actions.cjs').LibraryActions)(store(p.workspace)));return clientActions.get(key).run(p);}
   if(method.startsWith('library.')){const s=store(p.workspace);switch(method){case 'library.detail':return s.detail(p.id);case 'library.list':{const data=await s.listSummary();delete data.storagePath;return data;}case 'library.createFolder':return s.createFolder({name:p.name,parent:p.parent||''});case 'library.renameFolder':return s.renameFolder({folder:p.folder,name:p.name});case 'library.deleteFolder':if(isBusy?.(p))throw new Error('PC 작업을 마친 뒤 삭제해 주세요.');return s.deleteFolder(p.folder);case 'library.update':if(p.changes?.deleted&&isBusy?.({...p,ids:[p.id]}))throw new Error('PC 작업을 마친 뒤 삭제해 주세요.');return s.updateNote(p.id,p.changes,p.changes?.expected||p.expected);case 'library.restore':return s.restoreTrash(p.ids);case 'library.delete':if(isBusy?.(p))throw new Error('현재 작업을 마친 뒤 삭제해 주세요.');return s.deleteTrash(p.ids);case 'library.move':return s.moveNotes({ids:p.ids,folder:p.folder});}}
-  if(method==='convert'){if(p.workspace!=='work')throw new Error('모바일 신규 변환은 Work에서 사용해 주세요.');const env=await conversions.environment();if(!env.models?.some(m=>m.id===p.model&&m.downloaded))throw new Error('PC에 설치된 모델을 선택해 주세요.');return conversions.enqueue({id:p.id,workspace:'work',model:p.model});}
+  if(method==='convert'){if(modelPending?.())throw Error('PC의 모델 작업을 마친 뒤 변환해 주세요.');if(p.workspace!=='work')throw new Error('모바일 신규 변환은 Work에서 사용해 주세요.');const env=await conversions.environment();if(!env.models?.some(m=>m.id===p.model&&m.downloaded))throw new Error('PC에 설치된 모델을 선택해 주세요.');return conversions.enqueue({id:p.id,workspace:'work',model:p.model});}
   if(method==='cancel'){const note=locate(p.id).data.notes.find(n=>n.id===p.id);if(!note)throw new Error('작업을 찾지 못했습니다.');return conversions.cancel(p.id);}
   if(method==='memo.create')return new Memos(store(p.workspace)).create(p.folder||'');
   if(method==='memo.changes')return new Memos(locate(p.id)).changes(p);
@@ -53,7 +56,7 @@ function webServices({libraries,actions,conversions,preferences,root,dist,Browse
   }
   if(method==='audio.import'){const ext=path.extname(p.name||'').toLowerCase();if(!['.wav','.mp3','.m4a','.webm','.ogg','.flac','.mp4','.aac'].includes(ext))throw new Error('지원하는 음성 파일을 선택해 주세요.');await fs.mkdir(root,{recursive:true});const file=path.join(root,randomUUID()+ext);await fs.writeFile(file,new Uint8Array(p.bytes),{flag:'wx'});try{const result=await store(p.workspace).importAudio(file,p.folder||'');result.library=await store(p.workspace).updateNote(result.note.id,{title:path.basename(p.name,ext)});result.note=result.library.notes.find(n=>n.id===result.note.id);result.notes=[result.note];return result;}finally{await fs.unlink(file);}}
   if(method==='record.discard-saved')return store('work').discardRecording(p.id);
-  if(method==='record.begin'){const value=await store('work').beginRecording(p);recordings.set(value.id,context.device);onRecordingChange?.();return value;}
+  if(method==='record.begin'){if(modelPending?.())throw Error('PC의 모델 작업을 마친 뒤 녹음을 시작해 주세요.');const value=await store('work').beginRecording(p);recordings.set(value.id,context.device);onRecordingChange?.();return value;}
   if(method.startsWith('record.')){if(recordings.get(p.id)!==context.device)throw new Error('다른 기기의 진행 중인 녹음입니다.');const s=store('work');switch(method){case 'record.append':return s.appendRecording({...p,bytes:new Uint8Array(p.bytes)});case 'record.checkpoint':return s.checkpointRecording(p);case 'record.finish':{const result=await s.finishRecording(p);recordings.delete(p.id);onRecordingChange?.();return result;}case 'record.abandon':{await s.abandonRecording(p.id);recordings.delete(p.id);onRecordingChange?.();return s.list();}case 'record.discard':{await s.discardRecording(p.id);recordings.delete(p.id);onRecordingChange?.();return s.list();}}}
   if(method==='record.discard-saved'){return store('work').discardRecording(p.id);}
   throw new Error('웹에서 지원하지 않는 기능입니다. PC 앱에서 사용해 주세요.');

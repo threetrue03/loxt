@@ -14,6 +14,7 @@ import NoteCard from './NoteCard.jsx';
 import MemoPage from './MemoPage.jsx';
 import { MemoSaveNotice } from './MemoHost.jsx';
 import HomePage from './HomePage.jsx';
+import ModelStore from './ModelStore.jsx';
 import useRecentNotes from './useRecentNotes.js';
 import Modal from './Modal.jsx';
 import Menu from './Menu.jsx';
@@ -322,7 +323,8 @@ export default function App({ onRecordingActivity, workspaceActive = true, liveA
     </aside>
     <main className="main">{view === 'list' && !['all','recent','trash'].includes(filter) ? <MobileLibraryTools onTrash={() => navigate('trash')}/> : null}{recovery ? <p className="recovery-message" role="status">보관함 목록을 {recovery.backup ? "백업과 녹음 메타데이터" : "녹음 메타데이터"}로 복구했습니다. {recovery.skipped ? `${recovery.skipped}개 항목은 읽지 못해 복구에서 제외했습니다. 원본 파일은 보존됩니다. ` : ""}{!recovery.backup ? "빈 폴더 등 메타데이터에 없는 정보는 복구되지 않을 수 있습니다." : "백업 시점 이후의 빈 폴더 변경은 확인이 필요합니다."}<button className="secondary" onClick={() => setRecovery(null)}>확인</button></p> : null}
 
-      {view === 'list' && filter === 'all' ? <HomePage mode="work" loaded={loaded} busy={busy} notes={notes} folders={folders} parents={folderParents} recent={recent} jobs={backgroundEnvironment.queue.filter(job => !job.workspace || job.workspace === 'work')} recording={busy && draftOpen ? { title: 'Work 녹음', status: '녹음으로 돌아가 계속 기록하세요.', onOpen: () => { setSelectedId(null); setView('workspace'); } } : null} onRecord={newRecording} onImport={importAudio} onYouTube={() => setModal({type:'youtube'})} onMemo={newMemo} onFolder={() => createFolderInline('')} onLibrary={() => navigate('library')} onRoot={() => navigate('')} onJob={openBackgroundJob}
+      {view === 'models' ? <ModelStore mode="work" onBack={() => navigate('all')}/> : null}
+      {view === 'list' && filter === 'all' ? <HomePage mode="work" loaded={loaded} busy={busy} notes={notes} folders={folders} parents={folderParents} recent={recent} jobs={backgroundEnvironment.queue.filter(job => !job.workspace || job.workspace === 'work')} recording={busy && draftOpen ? { title: 'Work 녹음', status: '녹음으로 돌아가 계속 기록하세요.', onOpen: () => { setSelectedId(null); setView('workspace'); } } : null} onRecord={newRecording} onImport={importAudio} onYouTube={() => setModal({type:'youtube'})} onMemo={newMemo} onFolder={() => createFolderInline('')} onLibrary={() => navigate('library')} onRoot={() => navigate('')} onJob={openBackgroundJob} onModels={() => setView("models")}
         renderNote={note => <NoteCard key={note.id} note={note} onOpen={() => openNote(note.id)} onMenu={(event, context) => openActions(event, { type: 'note', id: note.id, folder: note.folder, deleted: note.deleted }, context)} editing={renaming?.type === 'note' && renaming.id === note.id} onRename={title => changeNoteFromMenu(note.id, { title })} onCancelRename={() => setRenaming(null)}/>}
         renderFolder={folder => <FolderCard key={folder} folder={folder} name={leafName(folder, folderParents)} onOpen={() => navigate(folder)} onMenu={(event, context) => openFolderMenu(event, folder, context)}/>}
       /> : view === 'list' ? <LibraryView recordingBusy={busy} mode="work" renameTarget={renaming} onRenameEnd={() => setRenaming(null)} folder={filter} active={workspaceActive} onNavigate={navigate} onOpen={openNote} onRecord={(_mode,folder) => { newRecording(); if (!draftOpen) setDraftFolder(folder); }} onImport={importAudio} onYouTube={() => setModal({type:'youtube'})}/> : null}

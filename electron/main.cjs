@@ -44,7 +44,7 @@ let live;
 let systemAudio;
 let youtube;
 let appearance;
-let preferences, settingsSupport, modelActions;
+let preferences, settingsSupport, modelActions, modelStore;
 let lastSettingsNotice = '';
 let systemAudioAllowed = false;
 let blocker = null;
@@ -162,7 +162,7 @@ function handle(channel, work) {
   });
 }
 function refreshBlocker() {
-  const active = library.sessions.size || youtube?.hasJobs || live?.busy || conversions?.hasJobs || ['prepare', 'transcribe', 'download'].includes(transcriber?.operation);
+  const active = library.sessions.size || youtube?.hasJobs || live?.busy || conversions?.hasJobs || ['prepare', 'transcribe', 'download', 'benchmark'].includes(transcriber?.operation);
   if (active && blocker === null) blocker = powerSaveBlocker.start('prevent-app-suspension');
   if (!active && blocker !== null) { powerSaveBlocker.stop(blocker); blocker = null; }
   publishSettings();
@@ -171,6 +171,7 @@ function modelLockReason() {
   if (library?.sessions.size) return '녹음을 마친 뒤 모델을 변경할 수 있어요.';
   if (live?.busy) return 'Live 작업을 마치거나 취소한 뒤 모델을 변경할 수 있어요.';
   if (conversions?.hasJobs) return '변환 작업을 마치거나 취소한 뒤 모델을 변경할 수 있어요.';
+  if (youtube?.hasJobs) return 'YouTube 음성을 가져오는 작업을 마친 뒤 모델을 변경할 수 있어요.';
   if (transcriber?.busy) return '현재 준비·모델 작업을 마친 뒤 변경할 수 있어요.';
   return '';
 }
@@ -215,6 +216,15 @@ handle('preferences:set', async payload => {
   return preferences.set(payload?.mode, payload?.change);
 });
 handle('settings:state', () => settingsState());
+handle('model-store:list', options => modelStore.list(options));
+handle('model-store:search', options => modelStore.search(options));
+handle('model-store:detail', repo => modelStore.detail(repo));
+let modelJobGeneration = 0;
+handle('model-store:install', repo => { requireNoConversions(); if(!require('./model-store.cjs').REPO.test(repo||''))throw Error('모델 주소를 확인해 주세요.'); const generation=++modelJobGeneration; return modelActions.run('install', require('./model-store.cjs').modelId(repo), async()=>{const plan=await modelStore.plan(repo);if(generation!==modelJobGeneration)return {canceled:true};if(transcriber.busy||conversions.hasJobs||live.busy||library.sessions.size)throw Error('현재 작업을 마친 뒤 설치해 주세요.');return transcriber.installStoreModel(plan);}); });
+handle('model-store:assign', payload => { requireNoConversions(); return modelActions.run('default',payload?.id,()=>modelStore.assign(payload),payload?.mode); });
+handle('model-store:benchmark', id => { requireNoConversions(); const generation=++modelJobGeneration; return modelActions.run('benchmark',id,()=>modelStore.benchmark(id,()=>generation!==modelJobGeneration)); });
+handle('model-store:cancel', () => { if(!modelActions?.pending||!['install','benchmark'].includes(modelActions.pending.action))throw Error('취소할 모델 작업이 없습니다.');++modelJobGeneration;return transcriber.cancel(); });
+handle('model-store:source', repo => { if(!require('./model-store.cjs').REPO.test(repo||''))throw Error('모델 주소를 확인해 주세요.');return shell.openExternal('https://huggingface.co/'+repo); });
 handle('settings:verify', model => { requireNoConversions(); return modelActions.run('verify', model, async () => { await transcriber.configure({ model, device: 'auto' }, { persist: false }); return transcriber.prepare(); }); });
 handle('settings:storage', force => settingsSupport.storage(Boolean(force)));
 handle('settings:location', async payload => {
@@ -244,7 +254,7 @@ handle('appearance:set', async theme => {
 handle('transcription:environment', () => conversions.environment());
 function requireNoConversions() { const reason = modelLockReason(); if (reason || modelActions?.pending) throw new Error(reason || '현재 모델 작업을 마친 뒤 다시 시도해 주세요.'); }
 handle('transcription:prepare', () => { requireNoConversions(); return transcriber.prepare(); });
-handle('transcription:start', payload => conversions.enqueue(payload));
+handle('transcription:start', payload => { if(modelActions?.pending)throw Error('모델 작업을 마친 뒤 변환해 주세요.');return conversions.enqueue(payload); });
 handle('transcription:cancel', id => conversions.cancel(id));
 handle('transcription:retry-speakers', payload => { requireNoConversions(); return transcriber.retrySpeakers(payload.id, workspaceLibraries.get(payload.workspace)); });
 handle('transcription:configure', value => { requireNoConversions(); return transcriber.configure(value); });
@@ -330,8 +340,8 @@ handle('live:state', () => live.snapshot());
 handle('system-audio:start', () => { if (!systemAudioAllowed) throw new Error('컴퓨터 소리 녹음 권한을 먼저 요청해 주세요.'); return systemAudio.start(); });
 handle('system-audio:cancel-pending', () => systemAudio.cancelPending());
 handle('system-audio:stop', id => systemAudio.stop(id));
-handle('live:prepare', options => live.prepare(options));
-handle('live:start', options => live.start(options));
+handle('live:prepare', options => { if(modelActions?.pending)throw Error('모델 작업을 마친 뒤 Live를 시작해 주세요.');return live.prepare(options); });
+handle('live:start', options => { if(modelActions?.pending)throw Error('모델 작업을 마친 뒤 Live를 시작해 주세요.');return live.start(options); });
 handle('live:append', payload => live.append(payload));
 handle('live:pause', payload => live.pause(payload?.id, Boolean(payload?.paused)));
 handle('live:finish', id => live.finish(id));
@@ -398,7 +408,7 @@ handle('recording:discard', async id => {
   try { return await library.discardRecording(id); } finally { refreshBlocker(); }
 });
 handle('library:open', () => shell.openPath(library.root));
-handle('recording:begin', async payload => { const result = await library.beginRecording(payload); refreshBlocker(); return result; });
+handle('recording:begin', async payload => { if(modelActions?.pending)throw Error('모델 작업을 마친 뒤 녹음을 시작해 주세요.');const result = await library.beginRecording(payload); refreshBlocker(); return result; });
 handle('recording:append', payload => library.appendRecording(payload));
 handle('recording:checkpoint', payload => library.checkpointRecording(payload));
 handle('recording:finish', async payload => { const result = await library.finishRecording(payload); refreshBlocker(); return result; });
@@ -410,7 +420,7 @@ handle('audio:import', async payload => {
 });
 handle('youtube:inspect', url => youtube.inspect(url));
 handle('youtube:cancel-inspect', () => youtube.cancelInspect());
-handle('youtube:start', payload => youtube.start(payload));
+handle('youtube:start', payload => { if(modelActions?.pending)throw Error('모델 작업을 마친 뒤 음성을 가져와 주세요.');return youtube.start(payload); });
 handle('youtube:state', () => youtube.snapshot());
 handle('youtube:cancel', id => youtube.cancel(id));
 handle('youtube:open-source', async id => {
@@ -493,6 +503,8 @@ app.whenReady().then(async () => {
     runtime: app.isPackaged ? path.join(process.resourcesPath, 'python-runtime') : path.join(__dirname, '../.runtime/python'), runtimeRequired: app.isPackaged,
     resources: app.isPackaged ? path.join(process.resourcesPath, 'python') : path.join(__dirname, '../python'),
     library, onChange: () => { conversions?.changed(); live?.environmentChanged(); } });
+  modelStore = new (require('./model-store.cjs').ModelStore)(transcriber.root,{engine:transcriber,preferences,notify:()=>{if(mainWindow&&!mainWindow.isDestroyed())mainWindow.webContents.send('model-store:changed',modelStore.snapshot());transcriber.modelList().then(models=>transcriber.update({models})).catch(()=>{});}});
+  transcriber.store=modelStore;
   conversions = new ConversionQueue(transcriber, library, state => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('transcription:state', state);
     deviceServer?.event('transcription',state);
@@ -518,7 +530,7 @@ app.whenReady().then(async () => {
     catch { return new Response(null, { status: 404 }); }
   });
   const {webServices}=require('./web-services.cjs');
-  const web=webServices({libraries:{get:mode=>workspaceLibraries.get(mode)},actions:libraryActions,conversions,preferences,root:path.join(app.getPath('userData'),'web-exports'),dist:path.join(__dirname,'../dist'),BrowserWindow,onRecordingChange:refreshBlocker,getLiveState:()=>live.snapshot(),isBusy:payload => Boolean(pendingMemoIds.size || live?.busy && (payload.ids?.includes(live.state.id) || payload.id===live.state.id))});
+  const web=webServices({modelStore,modelPending:()=>Boolean(modelActions?.pending),libraries:{get:mode=>workspaceLibraries.get(mode)},actions:libraryActions,conversions,preferences,root:path.join(app.getPath('userData'),'web-exports'),dist:path.join(__dirname,'../dist'),BrowserWindow,onRecordingChange:refreshBlocker,getLiveState:()=>live.snapshot(),isBusy:payload => Boolean(pendingMemoIds.size || live?.busy && (payload.ids?.includes(live.state.id) || payload.id===live.state.id))});
   deviceServer=new (require('./device-server.cjs').DeviceServer)({root:path.join(app.getPath('userData'),'device-server'),dist:path.join(__dirname,'../dist'),...web,previewCheck:payload=>{const note=pdfFor(payload.workspace).note(payload.id,true);if(payload.object&&payload.object.page>note.pages)throw Error('PDF 페이지를 확인해 주세요.');},previewLocal:value=>{if(mainWindow&&!mainWindow.isDestroyed())mainWindow.webContents.send('pdf:preview-ink',value);},onState:state=>{if(mainWindow&&!mainWindow.isDestroyed())mainWindow.webContents.send('devices:state',state);}});
   await deviceServer.initialize().catch(error=>{deviceServer.lastError=error.message;});
   createWindow();

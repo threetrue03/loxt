@@ -11,8 +11,9 @@ PRESETS = {"small": "최적화", "large-v3-turbo": "표준", "large-v3": "고성
 
 def selected_models(value):
     names = value.split(",")
-    if not names or any(name not in PRESETS for name in names):
-        raise ValueError("설치할 모델은 small, large-v3-turbo, large-v3 중에서 선택해 주세요.")
+    from downloads import MODELS
+    if not names or any(name not in MODELS for name in names):
+        raise ValueError("지원하는 Whisper 모델을 선택해 주세요.")
     return list(dict.fromkeys(names))
 
 
@@ -60,9 +61,9 @@ def main():
             elif kind == "phase":
                 print(data["message"], flush=True)
             elif kind == "model-start":
-                print(f"[{data['index']}/{data['total']}] {PRESETS[data['model']]} ({data['model']}) 설치", flush=True)
+                print(f"[{data['index']}/{data['total']}] {PRESETS.get(data['model'], data['model'])} ({data['model']}) 설치", flush=True)
             elif kind == "model-installed":
-                print(f"{PRESETS[data['model']]} 모델 설치 완료", flush=True)
+                print(f"{PRESETS.get(data['model'], data['model'])} 모델 설치 완료", flush=True)
             elif kind in ['engine-start', 'validation-start', 'model-ready', 'environment-ready', 'hardware']:
                 print(data.get('message') or f"전사 준비: {data.get('model', '')} {data.get('device', '')}", flush=True)
         import downloads

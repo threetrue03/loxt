@@ -1,6 +1,6 @@
 {
   "name": "sorinote-desktop",
-  "version": "2.5.0",
+  "version": "2.6.0",
   "private": true,
   "description": "LOXT 로컬 전사 데스크톱 앱",
   "author": "LOXT",
@@ -18,7 +18,7 @@
     "assets": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-icon.ps1",
     "package": "npm run bundle:python && npm run bundle:youtube && npm run assets && node scripts/editor-notices.mjs && npm run build && electron-builder --dir --win --x64",
     "package:installer": "npm run bundle:python && npm run bundle:youtube && npm run assets && node scripts/editor-notices.mjs && npm run build && node scripts/package-installer.cjs && node scripts/release-manifest.mjs",
-    "test:release": "node --test scripts/release.test.cjs scripts/automatic-transcription.test.cjs scripts/external-models.test.cjs scripts/conversion-queue.test.cjs scripts/nested-folders.test.cjs scripts/trash.test.cjs scripts/library-interactions.test.cjs scripts/workspace-libraries.test.cjs scripts/transcript-timestamps.test.cjs scripts/live.test.cjs scripts/youtube.test.cjs scripts/appearance.test.cjs scripts/improvements.test.cjs scripts/settings.test.cjs scripts/memos.test.cjs scripts/panel.test.cjs scripts/folder-export.test.cjs scripts/v2-services.test.cjs scripts/connection.test.cjs scripts/sync-pdf.test.cjs scripts/drawing.test.cjs scripts/remote-sync.test.cjs scripts/documents-2.5.test.cjs",
+    "test:release": "node --test scripts/release.test.cjs scripts/automatic-transcription.test.cjs scripts/external-models.test.cjs scripts/conversion-queue.test.cjs scripts/nested-folders.test.cjs scripts/trash.test.cjs scripts/library-interactions.test.cjs scripts/workspace-libraries.test.cjs scripts/transcript-timestamps.test.cjs scripts/live.test.cjs scripts/youtube.test.cjs scripts/appearance.test.cjs scripts/improvements.test.cjs scripts/settings.test.cjs scripts/memos.test.cjs scripts/panel.test.cjs scripts/folder-export.test.cjs scripts/v2-services.test.cjs scripts/connection.test.cjs scripts/sync-pdf.test.cjs scripts/drawing.test.cjs scripts/remote-sync.test.cjs scripts/documents-2.5.test.cjs scripts/model-store.test.cjs",
     "test:worker-pool": "node --test scripts/work-worker.test.cjs",
     "test:live": "npm run build && node scripts/live-smoke.mjs",
     "bundle:youtube": "node scripts/bundle-youtube.mjs",
@@ -27,7 +27,8 @@
     "test:theme": "npm run build && node scripts/theme-smoke.mjs",
     "test:memos": "npm run build && node scripts/memo-ui-smoke.mjs",
     "test:panels": "npm run build && node scripts/panel-ui-smoke.mjs",
-    "test:v2": "npm run build && node scripts/v2-ui-smoke.mjs"
+    "test:v2": "npm run build && node scripts/v2-ui-smoke.mjs",
+    "test:models": "node --test scripts/model-store.test.cjs"
   },
   "dependencies": {
     "@blocknote/code-block": "0.55.0",
@@ -77,7 +78,9 @@
         "to": "python",
         "filter": [
           "*.py",
-          "requirements*.txt"
+          "*.ps1",
+          "requirements*.txt",
+          "!test_*.py"
         ]
       },
       {

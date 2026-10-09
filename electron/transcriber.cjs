@@ -108,11 +108,21 @@ class Transcriber {
     await fs.rename(temporary, filename);
   }
   async catalogue() {
+    if (this.operation !== 'download') {
+      this.storeRecovery ||= require('./model-installation.cjs').recoverInstallation(this.root).finally(() => { this.storeRecovery = null; });
+      await this.storeRecovery;
+    }
     let external = [];
     try { external = JSON.parse(await fs.readFile(path.join(this.root, 'external-models.json'), 'utf8')); }
     catch (error) { if (error.code !== 'ENOENT') throw new Error('외부 모델 목록을 읽지 못했습니다. 앱 복구 후 다시 시도해 주세요.'); }
     if (!Array.isArray(external) || external.some(model => !/^external-[a-f0-9-]{36}$/.test(model.id) || typeof model.label !== 'string')) throw new Error('외부 모델 목록이 올바르지 않습니다.');
-    return [...MODELS, ...external.map(model => ({ id: model.id, label: model.label.slice(0, 120), size: model.size || '로컬 모델', description: '외부 모델 · faster-whisper', external: true }))];
+    let store = [];
+    try { store = JSON.parse(await fs.readFile(path.join(this.root, 'store-models.json'), 'utf8')); }
+    catch (error) { if (error.code !== 'ENOENT') throw Error('스토어 모델 목록을 읽지 못했습니다. 기존 모델 파일은 유지됩니다.'); }
+    if (!Array.isArray(store) || store.some(m=>!/^store-[a-f0-9]{24}$/.test(m.id) && !MODELS.some(b=>b.id===m.id) || typeof m.label!=='string' || !/^[a-f0-9]{40}$/.test(m.revision||'') || !require('./model-store.cjs').REPO.test(m.repo||''))) throw Error('스토어 모델 목록이 올바르지 않습니다.');
+    const all = [...MODELS.map(m=>({...m,...store.find(s=>s.id===m.id)})), ...store.filter(m=>!MODELS.some(b=>b.id===m.id)), ...external.map(model => ({ id: model.id, label: model.label.slice(0, 120), size: model.size || '로컬 모델', description: '외부 모델 · faster-whisper', external: true }))];
+    if (this.store) await this.store.ready;
+    return this.store ? this.store.decorate(all) : all;
   }
   async importModel(directory) {
     if (this.busy) throw new Error('현재 작업을 마친 뒤 모델을 불러와 주세요.');
@@ -176,6 +186,7 @@ class Transcriber {
       const directory = path.resolve(this.root, 'models', name);
       if (path.dirname(directory) !== path.resolve(this.root, 'models')) throw new Error('모델 경로가 올바르지 않습니다.');
       await fs.rm(directory, { recursive: true, force: true });
+      try { const registry = JSON.parse(await fs.readFile(path.join(this.root,'store-models.json'),'utf8')); await this.saveJson(path.join(this.root,'store-models.json'),registry.filter(m=>m.id!==name)); } catch(error) { if(error.code!=='ENOENT')throw error; }
       if (catalog.find(model => model.id === name).external) {
         await this.saveJson(path.join(this.root, 'external-models.json'), catalog.filter(model => model.external && model.id !== name));
         if (this.preferences?.model === name) {
@@ -191,7 +202,7 @@ class Transcriber {
   async installModels(names) {
     if (this.busy) throw new Error('작업을 마치거나 취소한 뒤 모델을 설치해 주세요.');
     await this.releaseWorkWorker();
-    if (!Array.isArray(names) || !names.length || names.length > 3 || names.some(name => !MODELS.some(model => model.preset && model.id === name))) throw new Error('설치할 모델을 확인해 주세요.');
+    if (!Array.isArray(names) || !names.length || names.length > 6 || names.some(name => !MODELS.some(model => model.id === name))) throw new Error('설치할 모델을 확인해 주세요.');
     const models = [...new Set(names)];
     this.operation = 'download'; this.cancelled = false;
     this.update({ stage: 'downloading', error: '', progress: null, message: '모델 설치 중', download: { model: models[0], index: 1, total: models.length } });
@@ -218,6 +229,48 @@ class Transcriber {
       this.update({});
     }
     return { ...this.snapshot(), canceled: wasCancelled };
+  }
+  async installStoreModel(plan) {
+    if (this.busy) throw Error('현재 작업을 마친 뒤 모델을 설치해 주세요.');
+    const { modelId, REPO } = require('./model-store.cjs');
+    if (!REPO.test(plan?.repo||'') || plan.model?.id !== modelId(plan.repo)) throw Error('설치할 모델을 확인해 주세요.');
+    await this.releaseWorkWorker();
+    const id=plan.model.id, modelsRoot=path.resolve(this.root,'models'), target=path.join(modelsRoot,id), stage=path.join(modelsRoot,'stage-'+id), backup=path.join(modelsRoot,'backup-'+id+'-'+randomUUID());
+    await fs.mkdir(modelsRoot,{recursive:true});
+    for(const dir of [modelsRoot,target,stage]){try{if((await fs.lstat(dir)).isSymbolicLink())throw Error('연결된 폴더에는 모델을 설치할 수 없습니다.');}catch(e){if(e.code!=='ENOENT')throw e;}}
+    await fs.mkdir(stage,{recursive:true});
+    const planFile=path.join(stage,'download-plan.json');await this.saveJson(planFile,plan);
+    this.operation='download';this.cancelled=false;this.update({stage:'downloading',error:'',progress:null,download:{model:id,index:1,total:1},message:'모델 스토어 다운로드 중'});
+    let moved=false, replaced=false, committed=false;
+    try {
+      const base=await this.basePython();let downloaded=false;
+      await this.run(base,[path.join(this.resources,'store_download.py'),'--plan',planFile,'--root',stage,'--parent-pid',String(process.pid)],line=>{let e;try{e=JSON.parse(line);}catch{return;}if(e.type==='download')this.update({progress:Math.min(99,Math.floor(e.current/e.total*100))});if(e.type==='download-complete')downloaded=true;});
+      if(!downloaded)throw Error('모델 다운로드 완료를 확인하지 못했습니다.');
+      this.update({stage:'checking',message:'다운로드한 모델 실행 확인 중',progress:null});
+      const python=this.state.python||this.python;
+      let prepared=false;
+      try {await fs.access(python);await this.run(python,[path.join(this.resources,'worker.py'),'prepare','--model-dir',stage,'--model',id,'--device',this.state.device||'cpu','--compute-type',this.state.computeType||'int8','--skip-download','--parent-pid',String(process.pid)],line=>{try{if(JSON.parse(line).type==='prepared')prepared=true;}catch{}});}
+      catch(error){if(this.cancelled)throw error;if(!/ENOENT|No module named|not found/i.test(error.message))throw error;}
+      if(!prepared){await this.run(base,[path.join(this.resources,'engine_prepare.py'),'--root',this.root,'--runtime',path.dirname(base),'--models',id,'--device','auto','--transient','--skip-auxiliary','--model-source',stage,'--parent-pid',String(process.pid)],line=>{try{const e=JSON.parse(line);if(e.type==='environment-ready')prepared=true;if(e.type==='engine-start')this.update({stage:'installing',message:e.message,progress:null});}catch{}});}
+      if(!prepared||this.cancelled)throw Error(this.cancelled?'cancelled':'모델 실행을 확인하지 못했습니다.');
+      let registry=[];try{registry=JSON.parse(await fs.readFile(path.join(this.root,'store-models.json'),'utf8'));if(!Array.isArray(registry))throw Error('모델 스토어 목록을 확인해 주세요.');}catch(e){if(e.code!=='ENOENT')throw e;}
+      await this.saveJson(path.join(this.root,'model-install-journal.json'),{version:1,id,revision:plan.revision,stage:path.basename(stage),backup:path.basename(backup)});
+      try{await fs.rename(target,backup);moved=true;}catch(e){if(e.code!=='ENOENT')throw e;}
+      await fs.rename(stage,target);replaced=true;
+      const record={id,repo:plan.repo,revision:plan.revision,label:plan.model.name,size:plan.model.size,description:plan.model.description,store:true,provider:plan.model.provider,license:plan.model.license,languages:plan.model.languages};
+      await this.saveJson(path.join(this.root,'store-models.json'),[...registry.filter(m=>m.id!==id),record]);committed=true;
+      await fs.unlink(path.join(target,'download-plan.json')).catch(()=>{});
+      if(moved&&path.dirname(backup)===modelsRoot)await fs.rm(backup,{recursive:true,force:true});
+      await fs.unlink(path.join(this.root,'model-install-journal.json'));
+      let preparedFile={};try{preparedFile=JSON.parse(await fs.readFile(path.join(this.root,'prepared.json'),'utf8'));}catch{}
+      await this.saveJson(path.join(this.root,'prepared.json'),{...preparedFile,validations:{...preparedFile.validations,[`${id}:${this.state.device||'cpu'}:${this.state.computeType||'int8'}`]:new Date().toISOString()}});
+      this.update({message:'모델 설치와 실행 확인을 마쳤습니다.'});
+    } catch(error) {
+      if(!committed){if(replaced)await fs.rename(target,stage);if(moved)await fs.rename(backup,target);await fs.unlink(path.join(this.root,'model-install-journal.json')).catch(()=>{});}
+      if(!this.cancelled){this.update({error:friendlyError(error.message)});throw error;}
+      return {canceled:true};
+    } finally {this.operation=null;const cancelled=this.cancelled;await this.detect();this.update({stage:'idle',download:null,progress:null,message:cancelled?'모델 설치를 취소했습니다. 다음 설치에서 이어받습니다.':this.state.message});}
+    return this.snapshot();
   }
   async detect(internal = false) {
     if (this.busy && !internal) return this.snapshot();
@@ -393,7 +446,7 @@ class Transcriber {
   }
   releaseWorkWorker() { return this.workWorker.close(); }
   cancel() {
-    if (!this.requestId && !['prepare', 'transcribe', 'download'].includes(this.operation)) return this.snapshot();
+    if (!this.requestId && !['prepare', 'transcribe', 'download','benchmark'].includes(this.operation)) return this.snapshot();
     // Saving an already completed result must finish atomically.
     if (this.state.stage === 'saving') return this.snapshot();
     this.cancelled = true; this.workWorker.close().catch(() => {}); if (this.child && !(this.auxiliary.children.has(this.child) && this.auxiliary.listeners.size > 1)) this.kill(this.child);

@@ -1,12 +1,14 @@
 # LOXT — Third-party notices
 
-확인일: 2026-10-08 · 앱 버전: 2.0.0
+확인일: 2026-10-09 · 앱 버전: 2.6.0
 
 LOXT 자체 코드와 브랜드의 저작권은 Copyright (c) 2026 threetrue03입니다. 현재 배포는 독점적 배포 조건을 따르며 MIT 공개를 뜻하지 않습니다. 이전에 별도 라이선스로 배포된 사본의 조건은 해당 사본의 고지를 따릅니다. 아래 모델, 라이브러리, 글꼴, 실행 도구의 권리는 각 원 저작권자에게 있습니다. 이 고지는 외부 구성요소의 라이선스를 변경하지 않습니다. LOXT 로고는 별도 브랜드 사용 안내를 따릅니다.
 
 저장소: https://github.com/threetrue03/loxt
 모델 출처: https://github.com/threetrue03/loxt/blob/main/docs/MODEL-LICENSES.md
 원문 사본 및 출처 기록: https://github.com/threetrue03/loxt/tree/main/docs/licenses
+
+모델 스토어의 검색 결과와 추가 설치 모델은 각 제공처의 라이선스를 따릅니다. 상세에서 제공처·라이선스를 확인하며 원문이 제공되면 모델 폴더에 함께 저장합니다. 스토어 검색이 모든 모델의 상업적 사용 권한을 뜻하지 않습니다.
 
 ## 음성 인식·화자 모델
 

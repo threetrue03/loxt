@@ -87,7 +87,7 @@ test('model installation validates selection, uses shared cache and preserves pr
   transcriber.run = async () => { throw new Error('no GPU'); };
   await transcriber.configure({ model: 'medium', device: 'cpu' });
   const before = await fs.readFile(path.join(root, 'settings.json'), 'utf8');
-  for (const names of [[], ['../library'], ['medium'], null]) await assert.rejects(transcriber.installModels(names), /모델/);
+  for (const names of [[], ['../library'], ['unknown'], null]) await assert.rejects(transcriber.installModels(names), /모델/);
   transcriber.operation = 'prepare';
   await assert.rejects(transcriber.installModels(['small']), /작업/);
   transcriber.operation = null;

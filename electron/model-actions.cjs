@@ -7,7 +7,7 @@ class ModelActions {
     this.filename = path.join(root, 'model-actions.json'); this.notify = notify; this.pending = null; this.issues = {}; this.message = ''; this.writes = Promise.resolve();
     try {
       const value = JSON.parse(fs.readFileSync(this.filename, 'utf8'));
-      if (value?.issues && !Array.isArray(value.issues)) this.issues = Object.fromEntries(Object.entries(value.issues).filter(([id, issue]) => /^[a-zA-Z0-9][a-zA-Z0-9.-]{0,100}$/.test(id) && ['install', 'delete', 'default', 'import', 'verify'].includes(issue?.action) && typeof issue.text === 'string'));
+      if (value?.issues && !Array.isArray(value.issues)) this.issues = Object.fromEntries(Object.entries(value.issues).filter(([id, issue]) => /^[a-zA-Z0-9][a-zA-Z0-9.-]{0,100}$/.test(id) && ['install', 'delete', 'default', 'import', 'verify','benchmark'].includes(issue?.action) && typeof issue.text === 'string'));
     } catch {}
   }
   snapshot() { return { pending: this.pending, issues: this.issues, message: this.message }; }

@@ -30,7 +30,7 @@ for (const filename of await readdir('shared')) {
   if (!asar.extractFile(archive, `shared/${filename}`).equals(await readFile(path.join('shared', filename)))) throw new Error(`Packaged shared source mismatch: ${filename}`);
 }
 for (const filename of await readdir('python')) {
-  if (!/\.(py|txt)$/.test(filename)) continue;
+  if (!/\.(py|txt|ps1)$/.test(filename) || /^test_.*\.py$/.test(filename)) continue;
   const installed = path.join(root, 'win-unpacked', 'resources', 'python', filename);
   if (!(await readFile(installed)).equals(await readFile(path.join('python', filename)))) throw new Error(`Packaged worker mismatch: ${filename}`);
 }
