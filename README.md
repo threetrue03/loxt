@@ -10,10 +10,10 @@
   <p>녹음하고, 변환하고, 메모하세요. 기록은 내 PC에.</p>
 
   <img src="https://img.shields.io/badge/Windows-x64-0078D4.svg" alt="Windows x64">
-  <img src="https://img.shields.io/badge/Version-2.3.0-59695D.svg" alt="소개 버전 2.3.0">
+  <img src="https://img.shields.io/badge/Version-2.4.0-59695D.svg" alt="소개 버전 2.4.0">
 
   <p>
-    <a href="https://github.com/threetrue03/loxt/releases/download/v2.3.0/LOXT-Setup-2.3.0-x64.exe"><strong>Windows 다운로드 · v2.3.0</strong></a> ·
+    <a href="https://github.com/threetrue03/loxt/releases/download/v2.4.0/LOXT-Setup-2.4.0-x64.exe"><strong>Windows 다운로드 · v2.4.0</strong></a> ·
     <a href="https://loxt.pages.dev/">소개 사이트</a> ·
     <a href="https://github.com/threetrue03/loxt/releases">릴리스 안내</a> ·
     <a href="https://github.com/threetrue03/loxt/issues">문의 · 버그 신고</a>
@@ -34,7 +34,7 @@ LOXT는 내 컴퓨터의 하드웨어로 음성을 스크립트로 변환하는 
   <img src="./docs/assets/workspace-dark.png" alt="LOXT Work 홈: 녹음, 파일·YouTube 불러오기, 내 보관함과 진행 중인 작업" width="100%">
 </picture>
 
-*2.3.0 실제 앱 화면입니다. 녹음·스크립트·메모는 소개용 예시이며 변환 정확도나 속도의 측정 결과가 아닙니다.*
+*2.4.0 실제 앱 화면입니다. 녹음·스크립트·메모는 소개용 예시이며 변환 정확도나 속도의 측정 결과가 아닙니다.*
 
 ## Work와 Live
 
@@ -74,6 +74,20 @@ LOXT는 내 컴퓨터의 하드웨어로 음성을 스크립트로 변환하는 
 | **보관함** | 중첩 폴더·이름 변경·경로 이동·여러 기록 선택·드래그 이동·휴지통 복구와 비우기를 지원합니다. |
 | **변환 대기열** | 다른 페이지로 이동해도 변환을 유지하고 작업별 상태 확인·취소를 제공합니다. |
 | **화면과 설정** | SUIT 글꼴, 다크·라이트 테마, 카드·작은 카드·목록 보기와 Work·Live별 기본 모델·입력 장치를 제공합니다. |
+
+## 2.4.0 — 기기 간 변경분 동기화
+
+- 메모는 변경 블록·순서, PDF·그리기는 변경 객체만 전송합니다. 저장 응답은 버전만 반환하고 다른 화면도 변경분을 조회합니다.
+- 필기 중에는 임시 미리보기를 표시합니다. 저장된 필기와 구분하며 취소·연결 해제·시간 만료 시 제거합니다.
+- 여러 웹 탭의 이벤트와 JSON 요청은 인증된 WebSocket을 사용합니다. 파일 업로드·다운로드는 HTTPS를 유지합니다.
+- 짧게 묶어 저장하며 변경 기록을 디스크에 동기화한 뒤 완료를 알립니다. 저장 기록은 재실행 시 복구하고 일정 크기마다 문서 사본으로 정리합니다.
+- 저장·편집 중 받은 변경은 버전을 기억해 다시 확인합니다. 동시 편집 충돌 시 현재 초안을 보존합니다.
+- 일반 메모 갱신은 바뀐 블록만 적용하며, 구조가 바뀌면 문서를 다시 적용합니다.
+- PC 설정 → 내 기기 연결 → 동기화 진단, 웹의 PC 연결됨에서 요청 시간·연결 상태를 확인하거나 진단을 복사할 수 있습니다.
+
+![다른 기기의 필기 미리보기](./landing/public/assets/sync-preview.png)
+
+실제 반영 시간은 Wi-Fi와 PC 상태에 따라 달라집니다. 동일 PC의 별도 예시 프로필 검증과 실제 iPad의 Wi-Fi 검증은 구분합니다. [구현·검증 기록](./docs/implementation-2.4.0.md)
 
 ## 2.3.0 — 그리기와 문서 집중 화면
 

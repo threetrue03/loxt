@@ -1,3 +1,6 @@
+import {documentTiming} from './syncDiagnostics.js';
+import {documentPatch} from '../shared/document-patch.js';
+import {requestDocumentRefresh} from './documentRefresh.js';
 import {documentPending,registerDocumentFlusher} from './documentPending.js';
 // Saves survive panel closure and navigation. Bodies stay outside the library index.
 const entries = new Map();
@@ -25,11 +28,7 @@ export function memoEntry(id) {
     installed=true;registerDocumentFlusher('memo',flushMemos);
     window.desktop.onLibraryChange(event => {
       if(event.kind&&event.kind!=='memo'&&!event.resync)return;
-      for (const entry of entries.values()) if ((!event.id||entry.id===event.id) && !entry.state.dirty && !entry.state.saving && !entry.state.loading) {
-        window.desktop.memos.get(entry.id).then(doc => {
-          if (!entry.state.dirty && !entry.state.saving && doc.revision > entry.state.revision) publish(entry, doc);
-        }).catch(error => publish(entry, { error: error.message }));
-      }
+      for(const entry of entries.values())if(!event.id||entry.id===event.id){entry.refreshFailed=false;requestDocumentRefresh(entry,{changes:window.desktop.memos.changes,get:p=>window.desktop.memos.get(p.id)},'blocks',publish,event.documentRevision||Infinity,event.requestId);}
     });
     window.addEventListener('beforeunload', event => {
       if ([...entries.values()].some(entry => entry.state.dirty)) {
@@ -38,25 +37,27 @@ export function memoEntry(id) {
       }
     });
   }
-  if (!entries.has(id)) entries.set(id, { id, state: empty, listeners: new Set(), request: null, load: null, timer: null, lastSavedAt: Date.now() });
+  if (!entries.has(id)) entries.set(id, { id, state: empty, listeners: new Set(), request: null, load: null, timer: null, lastSavedAt: Date.now(),savedBlocks:[],documentPayload:{id} });
   return entries.get(id);
 }
 export function loadMemo(id) {
   const entry = memoEntry(id);
-  if (entry.load) return entry.load;
+  if(entry.load){if(entry.targetRevision&&!entry.state.dirty)requestDocumentRefresh(entry,{changes:window.desktop.memos.changes,get:p=>window.desktop.memos.get(p.id)},'blocks',publish,entry.targetRevision);return entry.load;}
   entry.load = window.desktop.memos.get(id).then(doc => {
+    entry.savedBlocks=doc.blocks;
     let draft; try { draft = JSON.parse(localStorage.getItem(draftKey(id))); } catch {}
     publish(entry, { ...doc, ...draft, dirty: Boolean(draft), loading: false, error: draft ? '저장 대기 중인 초안을 복구했습니다. 저장하거나 최신 내용을 확인해 주세요.' : '' });
+    if(entry.targetRevision&&!entry.state.dirty)requestDocumentRefresh(entry,{changes:window.desktop.memos.changes,get:p=>window.desktop.memos.get(p.id)},'blocks',publish,entry.targetRevision);
   }).catch(error => { entry.load = null; publish(entry, { loading: false, error: error.message }); });
   return entry.load;
 }
 export function changeMemo(id, blocks) {
   const entry = memoEntry(id);
-  publish(entry, { blocks, dirty: true, error: '' });
+  documentTiming(id,'input',entry.state.revision);publish(entry, { blocks, dirty: true, error: '' });
   clearTimeout(entry.backupTimer);entry.backupTimer=setTimeout(()=>backup(entry),150);
   clearTimeout(entry.timer);
   // Coalesce typing, but checkpoint at least every two seconds during long input.
-  entry.timer = setTimeout(() => { void saveMemo(id).catch(() => {}); }, Math.min(250, Math.max(0, 2000 - (Date.now() - entry.lastSavedAt))));
+  entry.timer = setTimeout(() => { void saveMemo(id).catch(() => {}); }, Math.min(120, Math.max(0, 600 - (Date.now() - entry.lastSavedAt))));
 }
 export async function saveMemo(id) {
   const entry = memoEntry(id);
@@ -67,7 +68,7 @@ export async function saveMemo(id) {
   entry.request = (async () => {
     while (entry.state.dirty) {
       const blocks = entry.state.blocks;
-      const doc = await window.desktop.memos.save({ id, blocks, revision: entry.state.revision });
+      documentTiming(id,'send',entry.state.revision);const doc = await window.desktop.memos.save({id,patch:documentPatch(entry.savedBlocks,blocks),ack:true,revision:entry.state.revision});entry.savedBlocks=blocks;documentTiming(id,'saved',doc.revision);
       entry.lastSavedAt = Date.now();
       publish(entry, { revision: doc.revision, recovered: false, dirty: entry.state.blocks !== blocks });
       if (entry.state.dirty) backup(entry); else {clearTimeout(entry.backupTimer);localStorage.removeItem(draftKey(id));}
@@ -75,7 +76,7 @@ export async function saveMemo(id) {
   })();
   try { await entry.request; publish(entry, { saving: false, error: '' }); }
   catch (error) { backup(entry); publish(entry, { saving: false, dirty: true, error: error.message }); throw error; }
-  finally { entry.request = null; }
+  finally { entry.request = null;if(entry.targetRevision&&!entry.state.dirty)requestDocumentRefresh(entry,{changes:window.desktop.memos.changes,get:p=>window.desktop.memos.get(p.id)},'blocks',publish,entry.targetRevision); }
 }
 export async function flushMemos() { await Promise.all([...entries.keys()].map(saveMemo)); }
 export function subscribeMemoErrors(listener) { listeners.add(listener); return () => listeners.delete(listener); }
@@ -85,7 +86,7 @@ export async function latestMemo(id) {
   if (entry.request) await entry.request.catch(() => {});
   if (entry.state.dirty) backup(entry);
   const doc = await window.desktop.memos.get(id);
-  publish(entry, { ...doc, dirty: false, saving: false, error: '' });
+  entry.savedBlocks=doc.blocks;entry.targetRevision=0;publish(entry, { ...doc, dirty: false, saving: false, error: '' });
 }
 export function downloadMemoDraft(id) {
   const entry = memoEntry(id), url = URL.createObjectURL(new Blob([JSON.stringify({ version: 1, id, ...entry.state }, null, 2)], { type: 'application/json' }));

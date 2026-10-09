@@ -1,4 +1,4 @@
-const reads=new Set(['library.list','library.detail','memo.get','pdf.get','pdf.searchIndex','pdf.info','pdf.page','pdf.preview','pdf.outline','pdf.destination','search','environment','preferences','appInfo','liveState']);
+const reads=new Set(['memo.changes','pdf.changes','pdf.prepareIndex','library.list','library.detail','memo.get','pdf.get','pdf.searchIndex','pdf.info','pdf.page','pdf.preview','pdf.outline','pdf.destination','search','environment','preferences','appInfo','liveState']);
 class RequestCache {
   constructor(){this.entries=new Map();this.bytes=0;}
   prune(){const now=Date.now();for(const [key,e] of this.entries)if(e.settled&&(e.expires<now||this.bytes>8*1024*1024||this.entries.size>512)){this.entries.delete(key);this.bytes-=e.bytes;}}

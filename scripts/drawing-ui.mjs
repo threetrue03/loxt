@@ -2,7 +2,7 @@ import {_electron as electron,chromium} from 'playwright';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';import path from 'node:path';import {createRequire} from 'node:module';
 const require=createRequire(import.meta.url),{Library}=require('../electron/library.cjs'),{PDFs}=require('../electron/pdfs.cjs'),{Memos}=require('../electron/memos.cjs'),{PDFDocument}=require('pdf-lib'),{createCanvas}=require('@napi-rs/canvas');
-const out=path.resolve('test-results/drawing-2.3.0');await fs.mkdir(out,{recursive:true});
+const out=path.resolve('test-results/drawing-2.4.0');await fs.mkdir(out,{recursive:true});
 const fixture=path.join(out,'large-image.pdf');
 try{await fs.access(fixture);}catch{
  const canvas=createCanvas(1500,2000),ctx=canvas.getContext('2d'),image=ctx.createImageData(1500,2000);let seed=12345;
@@ -12,7 +12,7 @@ try{await fs.access(fixture);}catch{
 }
 const profile=await fs.mkdtemp(path.join(out,'drawing-profile-')),root=path.join(profile,'LOXT');await fs.mkdir(root);await fs.writeFile(path.join(profile,'library-location.json'),JSON.stringify({version:1,root}));const library=new Library(path.join(root,'work-library'));await library.ready;
 const large=(await new PDFs(library).import(new Uint8Array(await fs.readFile(fixture)),'대용량 테스트.pdf')).note,memo=(await new Memos(library).create()).note;await library.updateNote(memo.id,{title:'집중 메모'});
-const results={version:'2.3.0',profile,synthetic:true,physicalIPad:false,fileBytes:(await fs.stat(fixture)).size,pages:large.pages,errors:[]};let app,browser;
+const results={version:'2.4.0',profile,synthetic:true,physicalIPad:false,fileBytes:(await fs.stat(fixture)).size,pages:large.pages,errors:[]};let app,browser;
 try{
  const exe=process.argv.slice(2).find(v=>v.endsWith('.exe'));app=await electron.launch({...(exe?{executablePath:path.resolve(exe)}:{}),args:exe?[]:['.'],env:{...process.env,ELECTRON_RUN_AS_NODE:undefined,SORINOTE_TEST:'1',SORINOTE_TEST_DATA:profile}});let pc=await app.firstWindow();for(let i=0;i<80&&!pc.url().endsWith('index.html');i++){await new Promise(r=>setTimeout(r,100));pc=app.windows().find(w=>w.url().endsWith('index.html'))||pc;}await pc.getByRole('heading',{name:'홈',exact:true}).waitFor();const scope=pc.locator('[data-workspace=work]');
  pc.on('pageerror',e=>results.errors.push(e.message));await scope.getByRole('button',{name:'내 보관함',exact:true}).click();await scope.getByRole('button',{name:'새로 추가하기',exact:true}).click();await pc.getByRole('menuitem',{name:'그리기',exact:true}).click();await pc.waitForFunction(()=>document.querySelector('.pdf-sheet canvas')?.dataset.rendered==='true');

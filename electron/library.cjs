@@ -193,10 +193,11 @@ class Library {
   async list() { await this.ready; return this.snapshot(); }
   async listSummary() { await this.ready; return require('../shared/library-summary.cjs').lightResult({...this.data,revision:this.revision,recovery:this.recovery,storagePath:this.root,indexError:this.indexError||null}); }
   async detail(id) { await this.ready; const note=this.data.notes.find(n=>n.id===id); if(!note)throw new Error('문서를 찾지 못했습니다.'); return JSON.parse(JSON.stringify(note)); }
-  emitChange(change) { const revision=this.revision; setImmediate(()=>this.onChange(revision,change)); }
+  emitChange(change) { const revision=this.revision,event={...change,...require('./sync-trace.cjs').current()};setImmediate(()=>this.onChange(revision,event)); }
   document(id, work) {
+    const trace=require('./sync-trace.cjs');trace.mark('queued');
     const previous=this.documents.get(id)||Promise.resolve();
-    const next=previous.catch(()=>{}).then(()=>this.ready).then(work);
+    const next=previous.catch(()=>{}).then(()=>this.ready).then(()=>{trace.mark('saveStarted');return work();});
     this.documents.set(id,next); next.finally(()=>{if(this.documents.get(id)===next)this.documents.delete(id);}).catch(()=>{});return next;
   }
   documentChanged(id,kind,doc,changes) {
@@ -205,7 +206,7 @@ class Library {
     const original=this.data.notes.find(n=>n.id===id)||this.sessions.get(id)?.note;
     this.revision++;
     if(original&&!original.deleted){const updated={...original,...changes,updatedRevision:this.revision};this.data={...this.data,notes:[updated,...this.data.notes.filter(n=>n.id!==id)]};}
-    this.emitChange({id,kind,documentRevision:doc.revision});
+    const trace=require('./sync-trace.cjs');trace.mark('bodyDurable');trace.mark('eventQueued');this.emitChange({id,kind,documentRevision:doc.revision,...trace.current()});
     const save=()=>this.enqueue(async()=>{if(this.metadataRevisions.get(kind+':'+id)!==doc.revision)return;const current=this.data.notes.find(n=>n.id===id)||this.sessions.get(id)?.note;if(current&&!current.deleted)await this.saveNote({...current,...changes},true);});
     const retry=attempt=>save().catch(error=>{this.indexError='본문은 저장됐지만 목록 갱신을 마치지 못했습니다. '+error.message;this.emitChange({id,kind:'library',error:this.indexError});if(attempt<3){const timer=setTimeout(()=>retry(attempt+1),1000*attempt);timer.unref?.();}});
     retry(1);return doc;

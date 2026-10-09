@@ -96,7 +96,7 @@ async function exportFolder(payload, { library, dialog, mainWindow }) {
       zip.addEmptyDirectory(location);
       if (note.kind === 'pdf') {
         zip.addFile(path.join(library.recordings,note.id,'original.pdf'),location + '원본.pdf');
-        zip.addFile(path.join(library.recordings,note.id,'annotations.json'),location + '필기.json');
+        zip.addBuffer(Buffer.from(JSON.stringify(await new (require('./pdfs.cjs').PDFs)(library).read(note.id),null,2)),location+'필기.json');
       } else if (note.kind !== 'memo') {
         if (typeof note.audioFile !== 'string' || path.basename(note.audioFile) !== note.audioFile) throw new Error('원본 녹음 경로를 확인해 주세요.');
         zip.addFile(path.join(library.recordings, note.id, note.audioFile), location + '원본' + path.extname(note.audioFile));

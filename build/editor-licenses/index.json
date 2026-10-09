@@ -1555,6 +1555,15 @@
     ]
   },
   {
+    "name": "ws",
+    "version": "8.22.0",
+    "license": "MIT",
+    "source": "git+https://github.com/websockets/ws.git",
+    "files": [
+      "LICENSE"
+    ]
+  },
+  {
     "name": "yazl",
     "version": "3.3.1",
     "license": "MIT",

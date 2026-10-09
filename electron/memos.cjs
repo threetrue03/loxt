@@ -2,6 +2,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { atomicJson } = require('./library.cjs');
+const sync=require('./document-sync.cjs');
 const ID = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/;
 const types = new Set(['paragraph','heading','bulletListItem','numberedListItem','checkListItem','toggleListItem','quote','table','codeBlock','image','file','divider','mathBlock']);
 const imageTypes = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp' };
@@ -57,17 +58,18 @@ class Memos {
   }
   async read(id) {
     await this.library.ready; this.note(id);
+    const file=path.join(this.directory(id),'memo.json'),cached=await sync.cached(this.library,file);if(cached)return cached;
     try {
       const doc = JSON.parse(await fs.readFile(path.join(this.directory(id), 'memo.json'), 'utf8'));
       if (doc.version !== 1 || !Number.isSafeInteger(doc.revision)) throw new Error('메모 형식이 올바르지 않습니다.');
-      validateBlocks(doc.blocks); return doc;
+      validateBlocks(doc.blocks); return sync.replay(file,doc,'blocks',validateBlocks);
     } catch (error) {
-      if (error.code === 'ENOENT' && this.note(id).kind !== 'memo') return { version: 1, revision: 0, blocks: [{ id: randomUUID(), type: 'paragraph', content: [], children: [] }] };
+      if(error.code==='ENOENT'&&this.note(id).kind!=='memo'){const [log,backup]=await Promise.all([fs.stat(file+'.journal').catch(e=>{if(e.code==='ENOENT')return null;throw e;}),fs.stat(file+'.backup').catch(e=>{if(e.code==='ENOENT')return null;throw e;})]);if(!log?.size&&!backup)return {version:1,revision:0,blocks:[{id,type:'paragraph',content:[],children:[]}]};}
       try {
         const backup = JSON.parse(await fs.readFile(path.join(this.directory(id), 'memo.json.backup'), 'utf8'));
         if (backup.version !== 1 || !Number.isSafeInteger(backup.revision)) throw new Error('잘못된 백업');
         validateBlocks(backup.blocks);
-        return { ...backup, recovered: true };
+        return {...await sync.replay(file,backup,'blocks',validateBlocks),recovered:true};
       } catch { /* Never replace an unreadable body with an empty document. */ }
       throw new Error('메모를 읽지 못했습니다. 원본을 유지했습니다. ' + error.message);
     }
@@ -75,16 +77,18 @@ class Memos {
   save(payload) {
     return this.library.document(payload?.id, async () => {
       const note = this.note(payload?.id, true), current = await this.read(note.id);
-      if (payload.revision !== current.revision) throw new Error('다른 화면에서 메모가 변경되었습니다. 다시 열어 내용을 확인해 주세요.');
-      const blocks = validateBlocks(payload.blocks);
+      if(payload.revision!==current.revision){const error=new Error('다른 화면에서 메모가 변경되었습니다. 내 초안을 보존하고 최신 내용을 확인해 주세요.');error.code='CONFLICT';throw error;}
+      const blocks = validateBlocks(payload.patch?sync.apply(current.blocks,payload.patch):payload.blocks);
       const doc = { version: 1, revision: current.revision + 1, updatedAt: new Date().toISOString(), blocks };
       if (current.recovered) await fs.copyFile(path.join(this.directory(note.id), 'memo.json'), path.join(this.directory(note.id), 'memo.json.damaged-' + Date.now())).catch(error => { if (error.code !== 'ENOENT') throw error; });
+      if(payload.patch){const file=path.join(this.directory(note.id),'memo.json');await fs.stat(file).catch(async error=>{if(error.code!=='ENOENT')throw error;await atomicJson(file,{version:1,revision:current.revision,blocks:current.blocks});});await sync.append(this.library,file,current,doc,payload.patch);}else {
       await atomicJson(path.join(this.directory(note.id), 'memo.json.backup'), { version: 1, revision: current.revision, updatedAt: current.updatedAt, blocks: current.blocks });
-      await atomicJson(path.join(this.directory(note.id), 'memo.json'), doc);
+      await atomicJson(path.join(this.directory(note.id), 'memo.json'), doc);await sync.reset(this.library,path.join(this.directory(note.id),'memo.json'),doc);sync.forget(this.library,path.join(this.directory(note.id),'memo.json'));}
       // A durable body save is authoritative even if the optional index preview fails.
-      return this.library.documentChanged(note.id,'memo',doc,{hasMemo:true,editedAt:doc.updatedAt,memoPreview:note.kind==='memo'?plainText(blocks):note.memoPreview});
+      const result=this.library.documentChanged(note.id,'memo',doc,{hasMemo:true,editedAt:doc.updatedAt,memoPreview:note.kind==='memo'?plainText(blocks):note.memoPreview});return payload.ack?{revision:result.revision,updatedAt:result.updatedAt}:result;
     });
   }
+  async changes({id,since}){const doc=await this.read(id);return sync.changes(this.library,path.join(this.directory(id),'memo.json'),doc,since,'blocks');}
   attach(payload) {
     return this.library.enqueue(async () => {
       this.note(payload?.id, true);

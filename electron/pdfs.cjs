@@ -2,6 +2,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { atomicJson } = require('./library.cjs');
+const sync=require('./document-sync.cjs');
 const LIMIT = 128 * 1024 * 1024;
 const indexJobs=new WeakMap();
 const number = v => Number.isFinite(v) && Math.abs(v) <= 100000;
@@ -42,9 +43,9 @@ class PDFs {
   }
   async read(id) {
     await this.library.ready; this.note(id);
-    const file=path.join(this.library.recordings,id,'annotations.json');
+    const file=path.join(this.library.recordings,id,'annotations.json'),cached=await sync.cached(this.library,file);if(cached)return cached;
     const read=async filename=>{const doc=JSON.parse(await fs.readFile(filename,'utf8'));if(doc.version!==1||!Number.isSafeInteger(doc.revision)||doc.revision<0)throw new Error('PDF 필기 형식을 확인해 주세요.');validateObjects(doc.objects);return doc;};
-    try{return await read(file);}catch(error){try{return {...await read(file+'.backup'),recovered:true};}catch{throw new Error('PDF 필기를 읽지 못했습니다. 원본 PDF와 필기 파일을 보존했습니다.');}}
+    try{return await sync.replay(file,await read(file),'objects',validateObjects);}catch(error){try{return {...await sync.replay(file,await read(file+'.backup'),'objects',validateObjects),recovered:true};}catch{throw new Error('PDF 필기를 읽지 못했습니다. 원본 PDF와 필기 파일을 보존했습니다.');}}
   }
   index(payload) {
     return this.library.enqueue(async()=>{
@@ -68,11 +69,13 @@ class PDFs {
       const objects=validateObjects(requested); if(objects.some(o=>o.page>note.pages))throw new Error('PDF 페이지를 확인해 주세요.');
       const doc={version:1,revision:current.revision+1,objects,updatedAt:new Date().toISOString()};
       if(current.recovered)await fs.copyFile(path.join(this.library.recordings,note.id,'annotations.json'),path.join(this.library.recordings,note.id,'annotations.damaged-'+Date.now()+'.json'));
+      if(payload.patch)await sync.append(this.library,path.join(this.library.recordings,note.id,'annotations.json'),current,doc,payload.patch);else {
       await atomicJson(path.join(this.library.recordings,note.id,'annotations.json.backup'),current);
-      await atomicJson(path.join(this.library.recordings,note.id,'annotations.json'),doc);
-      return this.library.documentChanged(note.id,'pdf',doc,{editedAt:doc.updatedAt});
+      await atomicJson(path.join(this.library.recordings,note.id,'annotations.json'),doc);await sync.reset(this.library,path.join(this.library.recordings,note.id,'annotations.json'),doc);sync.forget(this.library,path.join(this.library.recordings,note.id,'annotations.json'));}
+      const result=this.library.documentChanged(note.id,'pdf',doc,{editedAt:doc.updatedAt});return payload.ack?{revision:result.revision,updatedAt:result.updatedAt}:result;
     });
   }
+  async changes({id,since}){const doc=await this.read(id);return sync.changes(this.library,path.join(this.library.recordings,id,'annotations.json'),doc,since,'objects');}
   async export(id, annotated, fontFile) {
     const original=await fs.readFile(this.file(id)); if(!annotated)return original;
     const { PDFDocument,rgb }=require('pdf-lib'), doc=await PDFDocument.load(original,{updateMetadata:false}), data=await this.read(id);

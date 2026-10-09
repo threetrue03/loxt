@@ -1,3 +1,4 @@
+import WebSyncStatus from './WebSyncStatus.jsx';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import WorkspaceShell from './WorkspaceShell.jsx';
@@ -8,6 +9,6 @@ import WebRecordingRecovery from './WebRecordingRecovery.jsx';
 import './styles.css';
 import './panel.css';
 
-createRoot(document.getElementById('root')).render(<React.StrictMode><ThemeProvider><SettingsProvider><WorkspaceShell /><WebTransferStatus/><WebRecordingRecovery/></SettingsProvider></ThemeProvider></React.StrictMode>);
+createRoot(document.getElementById('root')).render(<React.StrictMode><ThemeProvider><SettingsProvider><WorkspaceShell /><WebTransferStatus/>{window.desktop.remote?<WebSyncStatus/>:null}<WebRecordingRecovery/></SettingsProvider></ThemeProvider></React.StrictMode>);
 
 import './v2.css';

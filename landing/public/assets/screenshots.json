@@ -1,9 +1,9 @@
 {
-  "version": "2.3.0",
+  "version": "2.4.0",
   "examples": true,
   "liveInference": false,
   "exampleAudio": "silent WAV and scripted transcript/speaker data; not accuracy or speed measurements",
-  "capturedAt": "2026-10-09T02:50:52.038Z",
+  "capturedAt": "2026-10-09T03:52:45.135Z",
   "images": [
     {
       "file": "sidebar-collapsed-work.png",
@@ -212,6 +212,12 @@
       "example": true
     },
     {
+      "file": "sync-diagnostics.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "personal-sync-diagnostics"
+    },
+    {
       "file": "mobile-home.png",
       "width": 390,
       "height": 844,
@@ -239,6 +245,12 @@
       "scenario": "approved-mobile-pdf",
       "workspace": "work",
       "example": true
+    },
+    {
+      "file": "sync-preview.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "paired-web-in-progress-ink-preview"
     },
     {
       "file": "live-home.png",

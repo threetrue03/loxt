@@ -21,6 +21,7 @@ function webServices({libraries,actions,conversions,preferences,root,dist,Browse
   if(method==='convert'){if(p.workspace!=='work')throw new Error('모바일 신규 변환은 Work에서 사용해 주세요.');const env=await conversions.environment();if(!env.models?.some(m=>m.id===p.model&&m.downloaded))throw new Error('PC에 설치된 모델을 선택해 주세요.');return conversions.enqueue({id:p.id,workspace:'work',model:p.model});}
   if(method==='cancel'){const note=locate(p.id).data.notes.find(n=>n.id===p.id);if(!note)throw new Error('작업을 찾지 못했습니다.');return conversions.cancel(p.id);}
   if(method==='memo.create')return new Memos(store(p.workspace)).create(p.folder||'');
+  if(method==='memo.changes')return new Memos(locate(p.id)).changes(p);
   if(method==='memo.get')return new Memos(locate(p.id)).read(p.id);
   if(method==='memo.save')return new Memos(locate(p.id)).save(p);
   if(method==='memo.attach')return new Memos(locate(p.id)).attach({...p,bytes:new Uint8Array(p.bytes)});
@@ -38,6 +39,7 @@ function webServices({libraries,actions,conversions,preferences,root,dist,Browse
   if(method==='pdf.preview'){const value=await new PDFs(store(p.workspace)).preview(p.id,p.page,p.scale);const image=await output('.'+value.format,file=>fs.writeFile(file,value.bytes),true);const item=exports.get(image.download.split('/').at(-1));item.name=null;item.mime=value.format==='jpg'?'image/jpeg':'image/png';return {...image,width:value.width,height:value.height};}
   if(method==='pdf.index')return new PDFs(store(p.workspace)).index(p);
   if(method==='pdf.searchIndex')return new PDFs(store(p.workspace)).searchIndex(p.id);
+  if(method==='pdf.changes')return new PDFs(store(p.workspace)).changes(p);
   if(method==='pdf.get')return new PDFs(store(p.workspace)).read(p.id);
   if(method==='pdf.save')return new PDFs(store(p.workspace)).save(p);
   if(method==='pdf.import')return new PDFs(store(p.workspace)).import(new Uint8Array(p.bytes),p.name,p.folder||'');

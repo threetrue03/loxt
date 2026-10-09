@@ -1,7 +1,7 @@
 import {memo} from 'react';
-function PdfInkObject({object:o,viewport,selected}){
+function PdfInkObject({object:o,viewport,selected,preview=false}){
  const z=viewport.scale,p=o.points.map(v=>viewport.convertToViewportPoint(...v)),a=p[0],b=p.at(-1);if(!a)return null;
- const props={'data-object':o.id,stroke:o.color,strokeWidth:o.width*z,fill:'none',strokeLinecap:'round',strokeLinejoin:'round'};let shape;
+ const props={'data-object':preview?undefined:o.id,stroke:o.color,strokeWidth:o.width*z,fill:'none',strokeLinecap:'round',strokeLinejoin:'round'};let shape;
  if(o.type==='text'){const size=(o.fontSize||Math.max(8,o.width*6))*z;shape=<text {...props} fill={o.color} stroke="none" x={a[0]} y={a[1]} fontSize={size}>{(o.text||'').split('\n').map((line,i)=><tspan x={a[0]} dy={i?size:0} key={i}>{line}</tspan>)}</text>;}
  else if(o.type==='rect')shape=<rect {...props} x={Math.min(a[0],b[0])} y={Math.min(a[1],b[1])} width={Math.abs(b[0]-a[0])} height={Math.abs(b[1]-a[1])}/>;
  else if(o.type==='ellipse')shape=<ellipse {...props} cx={(a[0]+b[0])/2} cy={(a[1]+b[1])/2} rx={Math.abs(b[0]-a[0])/2} ry={Math.abs(b[1]-a[1])/2}/>;

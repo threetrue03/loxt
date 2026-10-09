@@ -158,7 +158,7 @@ function handle(channel, work) {
   ipcMain.handle(channel, (event, payload) => {
     if (!isTrusted(event.senderFrame)) throw new Error('허용되지 않은 요청입니다.');
     if (relocating && !['browser:command', 'appearance:get', 'preferences:get'].includes(channel)) throw new Error('보관함 이전 중입니다. 완료 후 다시 시도해 주세요.');
-    return Promise.resolve(work(payload)).then(require('../shared/library-summary.cjs').lightResult);
+    return require('./sync-trace.cjs').run(require('node:crypto').randomUUID(),channel,()=>work(payload)).then(result=>require('../shared/library-summary.cjs').lightResult(result.value));
   });
 }
 function refreshBlocker() {
@@ -181,6 +181,11 @@ function publishSettings() {
   lastSettingsNotice = text;
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('settings:changed', state);
 }
+handle('devices:diagnostics',()=>deviceServer?.diagnostics?.()||{transport:'WebSocket',connections:[],recentRequests:[]});
+handle('devices:copy-diagnostics',()=>{clipboard.writeText(JSON.stringify(deviceServer?.diagnostics?.()||{},null,2));return true;});
+handle('pdf:preview-ink',payload=>deviceServer?.preview?.(payload,'desktop')||false);
+handle('pdf:changes',payload=>pdfFor(payload.workspace).changes(payload));
+handle('memos:changes',payload=>memoFor(payload.id).changes(payload));
 handle('devices:state', () => deviceServer?.snapshot() || {enabled:false,running:false});
 handle('devices:configure', enabled => deviceServer.configure(enabled));
 handle('devices:qr', () => deviceServer.newQR());
@@ -513,7 +518,7 @@ app.whenReady().then(async () => {
   });
   const {webServices}=require('./web-services.cjs');
   const web=webServices({libraries:{get:mode=>workspaceLibraries.get(mode)},actions:libraryActions,conversions,preferences,root:path.join(app.getPath('userData'),'web-exports'),dist:path.join(__dirname,'../dist'),BrowserWindow,onRecordingChange:refreshBlocker,getLiveState:()=>live.snapshot(),isBusy:payload => Boolean(pendingMemoIds.size || live?.busy && (payload.ids?.includes(live.state.id) || payload.id===live.state.id))});
-  deviceServer=new (require('./device-server.cjs').DeviceServer)({root:path.join(app.getPath('userData'),'device-server'),dist:path.join(__dirname,'../dist'),...web,onState:state=>{if(mainWindow&&!mainWindow.isDestroyed())mainWindow.webContents.send('devices:state',state);}});
+  deviceServer=new (require('./device-server.cjs').DeviceServer)({root:path.join(app.getPath('userData'),'device-server'),dist:path.join(__dirname,'../dist'),...web,previewCheck:payload=>{const note=pdfFor(payload.workspace).note(payload.id,true);if(payload.object&&payload.object.page>note.pages)throw Error('PDF 페이지를 확인해 주세요.');},previewLocal:value=>{if(mainWindow&&!mainWindow.isDestroyed())mainWindow.webContents.send('pdf:preview-ink',value);},onState:state=>{if(mainWindow&&!mainWindow.isDestroyed())mainWindow.webContents.send('devices:state',state);}});
   await deviceServer.initialize().catch(error=>{deviceServer.lastError=error.message;});
   createWindow();
   browserTabs = new BrowserTabs(mainWindow);

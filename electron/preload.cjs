@@ -14,10 +14,10 @@ else {
 }
 
 contextBridge.exposeInMainWorld('desktop', Object.freeze({
-  devices: Object.freeze({ get:()=>ipcRenderer.invoke('devices:state'), configure:enabled=>ipcRenderer.invoke('devices:configure',enabled), qr:()=>ipcRenderer.invoke('devices:qr'), copy:(kind,index=0)=>ipcRenderer.invoke('devices:copy',{kind,index}), approve:(id,allow)=>ipcRenderer.invoke('devices:approve',{id,allow}), revoke:id=>ipcRenderer.invoke('devices:revoke',id), onState:callback=>{const listener=(_event,value)=>callback(value);ipcRenderer.on('devices:state',listener);return()=>ipcRenderer.removeListener('devices:state',listener);} }),
+  devices: Object.freeze({diagnostics:()=>ipcRenderer.invoke('devices:diagnostics'),copyDiagnostics:()=>ipcRenderer.invoke('devices:copy-diagnostics'), get:()=>ipcRenderer.invoke('devices:state'), configure:enabled=>ipcRenderer.invoke('devices:configure',enabled), qr:()=>ipcRenderer.invoke('devices:qr'), copy:(kind,index=0)=>ipcRenderer.invoke('devices:copy',{kind,index}), approve:(id,allow)=>ipcRenderer.invoke('devices:approve',{id,allow}), revoke:id=>ipcRenderer.invoke('devices:revoke',id), onState:callback=>{const listener=(_event,value)=>callback(value);ipcRenderer.on('devices:state',listener);return()=>ipcRenderer.removeListener('devices:state',listener);} }),
   pdf: Object.freeze({
     create:p=>ipcRenderer.invoke('pdf:create',p),info:p=>ipcRenderer.invoke('pdf:info',p),prepareIndex:p=>ipcRenderer.invoke('pdf:prepare-index',p),
-    searchIndex:p=>ipcRenderer.invoke('pdf:search-index',p), index:payload=>ipcRenderer.invoke('pdf:index',payload), import: payload => ipcRenderer.invoke('pdf:import',payload), get: payload => ipcRenderer.invoke('pdf:get',payload), save: payload => ipcRenderer.invoke('pdf:save',payload), bytes: payload => ipcRenderer.invoke('pdf:bytes',payload), export: payload => ipcRenderer.invoke('pdf:export',payload) }),
+    searchIndex:p=>ipcRenderer.invoke('pdf:search-index',p), index:payload=>ipcRenderer.invoke('pdf:index',payload), import: payload => ipcRenderer.invoke('pdf:import',payload), previewInk:p=>ipcRenderer.invoke('pdf:preview-ink',p),onPreview:callback=>{const listener=(_event,value)=>callback(value);ipcRenderer.on('pdf:preview-ink',listener);return()=>ipcRenderer.removeListener('pdf:preview-ink',listener);},changes:p=>ipcRenderer.invoke('pdf:changes',p),get: payload => ipcRenderer.invoke('pdf:get',payload), save: payload => ipcRenderer.invoke('pdf:save',payload), bytes: payload => ipcRenderer.invoke('pdf:bytes',payload), export: payload => ipcRenderer.invoke('pdf:export',payload) }),
   browser: Object.freeze({
     command: payload => ipcRenderer.invoke('browser:command', payload),
     onState: callback => { const listener = (_event, value) => callback(value); ipcRenderer.on('browser:state', listener); return () => ipcRenderer.removeListener('browser:state', listener); },
@@ -28,7 +28,7 @@ contextBridge.exposeInMainWorld('desktop', Object.freeze({
   manageLibrary: payload => ipcRenderer.invoke('library:manage', payload),
   searchLibrary: payload => ipcRenderer.invoke('library:search', payload),
   memos: Object.freeze({
-    create: (folder, workspace = 'work') => ipcRenderer.invoke('memos:create', { folder, workspace }), get: id => ipcRenderer.invoke('memos:get', id),
+    create: (folder, workspace = 'work') => ipcRenderer.invoke('memos:create', { folder, workspace }), changes:p=>ipcRenderer.invoke('memos:changes',p),get: id => ipcRenderer.invoke('memos:get', id),
     save: payload => ipcRenderer.invoke('memos:save', payload), attach: payload => ipcRenderer.invoke('memos:attach', payload),
     export: payload => ipcRenderer.invoke('memos:export', payload), openLink: url => ipcRenderer.invoke('memos:link', url),
     copy: text => ipcRenderer.invoke('memos:copy', text),

@@ -1,3 +1,4 @@
+import {documentPatch} from '../shared/document-patch.js';
 import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { BlockNoteSchema, defaultBlockSpecs, createCodeBlockSpec, createHeadingBlockSpec, combineByGroup } from '@blocknote/core';
 import { filterSuggestionItems } from '@blocknote/core/extensions';
@@ -47,13 +48,19 @@ function Editor({ id, title, initial, state, compact, readOnly, onClose, documen
     try { if (file.size > 32 * 1024 * 1024) throw new Error('32 MB 이하의 파일을 첨부해 주세요.'); return await window.desktop.memos.attach({ id, name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) }); }
     catch (failure) { setError(failure.message); throw failure; }
   } }, [id]);
-  const applying = useRef(false);
-  useEffect(() => editor.onChange(() => { if (!applying.current) changeMemo(id, editor.document); }), [editor, id]);
+  const applying = useRef(false),appliedBlocks=useRef(initial);
+  useEffect(() => editor.onChange(() => { if(!applying.current){appliedBlocks.current=editor.document;changeMemo(id,editor.document);} }), [editor, id]);
   useEffect(() => {
-    if (state.blocks && JSON.stringify(editor.document) !== JSON.stringify(state.blocks)) {
-      applying.current = true;
-      try { editor.replaceBlocks(editor.document, state.blocks); } finally { applying.current = false; }
-    }
+    if(!state.blocks||state.blocks===appliedBlocks.current)return;
+    const changes=documentPatch(appliedBlocks.current,state.blocks),view=editor.prosemirrorView,selection=view?.state.selection.toJSON(),scroll=root.current?.querySelector('.bn-editor')?.parentElement,top=scroll?.scrollTop;
+    applying.current=true;
+    try{
+      if(changes.order)editor.replaceBlocks(editor.document,state.blocks);
+      else for(const block of changes.upsert)editor.updateBlock(block.id,block);
+      appliedBlocks.current=state.blocks;
+      if(selection&&view){try{const restored=view.state.selection.constructor.fromJSON(view.state.doc,selection);view.dispatch(view.state.tr.setSelection(restored));}catch{/* A deleted/shortened block cannot retain its old text range. */}}
+      if(scroll)scroll.scrollTop=top;
+    }finally{applying.current=false;}
   }, [editor, state.blocks]);
   useEffect(() => () => { void saveMemo(id).catch(() => {}); }, [id]);
   useEffect(() => () => clearTimeout(copyTimer.current), []);

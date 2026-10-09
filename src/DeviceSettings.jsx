@@ -3,6 +3,7 @@ import { cleanError } from './SettingsProvider.jsx';
 
 export default function DeviceSettings() {
   const [state, setState] = useState(null), [working, setWorking] = useState(false), [error, setError] = useState(''), [copied, setCopied] = useState('');
+  const [diagnostics,setDiagnostics]=useState(null);
   const timer = useRef(null), busy = useRef(false);
   useEffect(() => {
     let active = true;
@@ -50,6 +51,7 @@ export default function DeviceSettings() {
       </details>
     </> : null}
     {state?.pending.map(request => <div className="settings-row" key={request.id}><span>{request.name} · 연결 요청</span><div><button className="secondary" disabled={working} onClick={() => act(() => window.desktop.devices.approve(request.id, false))}>거절</button><button className="primary" disabled={working} onClick={() => act(() => window.desktop.devices.approve(request.id, true))}>승인</button></div></div>)}
+    <details><summary>동기화 진단</summary><p className="hint">요청 왕복 시간과 PC 처리 시간을 구분합니다. 최근 100개 요청의 식별자와 시간만 포함하며 문서 본문·접속 토큰은 포함하지 않습니다.</p><div className="settings-row"><span>{diagnostics?`WebSocket · 연결 ${diagnostics.connections.length}개 · 최근 PC 처리 ${diagnostics.recentRequests.at(-1)?.serverMs??'—'} ms`:'진단 정보를 확인해 주세요.'}</span><button className="secondary" onClick={()=>act(async()=>setDiagnostics(await window.desktop.devices.diagnostics()))}>새로 확인</button><button className="secondary" onClick={()=>act(()=>window.desktop.devices.copyDiagnostics())}>진단 복사</button></div>{diagnostics?.connections.map((item,index)=><p className="hint" key={index}>{item.name} · {item.ready?'연결됨':'연결 중'} · 왕복 {item.rttMs??'—'} ms · 대기 {item.pending}개 · 재시도 {item.retries??0}회</p>)}</details>
     <h2>연결된 기기</h2>{!state?.devices.length ? <p className="hint">연결된 기기가 없습니다.</p> : state.devices.map(device => <div className="settings-row" key={device.id}><div>{device.name}<p className="hint">{device.lastSeen}</p></div><button className="secondary danger" disabled={working} onClick={() => act(() => window.desktop.devices.revoke(device.id))}>연결 해제</button></div>)}
   </section>;
 }
