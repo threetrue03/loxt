@@ -3,6 +3,7 @@ const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { atomicJson } = require('./library.cjs');
 const sync=require('./document-sync.cjs');
+const drawing=require('./drawing-pages.cjs');
 const LIMIT = 128 * 1024 * 1024;
 const indexJobs=new WeakMap();
 const number = v => Number.isFinite(v) && Math.abs(v) <= 100000;
@@ -10,7 +11,7 @@ function validateObjects(objects) {
   if (!Array.isArray(objects) || objects.length > 20000 || Buffer.byteLength(JSON.stringify(objects)) > 20_000_000) throw new Error('필기 크기를 확인해 주세요.');
   const ids = new Set();
   for (const o of objects) {
-    if (!o || !/^[a-f0-9-]{36}$/.test(o.id) || ids.has(o.id) || !['pen','highlight','rect','ellipse','line','arrow','text'].includes(o.type) || !Number.isSafeInteger(o.page) || o.page < 1 || !/^#[a-f0-9]{6}$/i.test(o.color) || !number(o.width) || o.width < .1 || o.width > 100 || (o.fontSize!=null&&(!number(o.fontSize)||o.fontSize<6||o.fontSize>144)) || !Array.isArray(o.points) || o.points.length > 50000 || !o.points.every(p => Array.isArray(p) && p.length === 2 && p.every(number)) || typeof (o.text || '') !== 'string' || (o.text || '').length > 10000) throw new Error('필기 형식이 올바르지 않습니다.');
+    if (!o || !/^[a-f0-9-]{36}$/.test(o.id) || ids.has(o.id) || !['pen','highlight','rect','ellipse','line','arrow','text'].includes(o.type) || !Number.isSafeInteger(o.page) || o.page < 1 || !/^#[a-f0-9]{6}$/i.test(o.color) || !number(o.width) || o.width < .1 || o.width > 100 || (o.fontSize!=null&&(!number(o.fontSize)||o.fontSize<6||o.fontSize>144)) || !Array.isArray(o.points) || o.points.length > 50000 || !o.points.every(p => Array.isArray(p) && p.length === 2 && p.every(number)) || (o.pageId!=null&&!/^[a-f0-9-]{36}$/.test(o.pageId)) || typeof (o.text || '') !== 'string' || (o.text || '').length > 10000) throw new Error('필기 형식이 올바르지 않습니다.');
     ids.add(o.id);
   }
   return objects;
@@ -43,8 +44,9 @@ class PDFs {
   }
   async read(id) {
     await this.library.ready; this.note(id);
+    const note=this.note(id);
     const file=path.join(this.library.recordings,id,'annotations.json'),cached=await sync.cached(this.library,file);if(cached)return cached;
-    const read=async filename=>{const doc=JSON.parse(await fs.readFile(filename,'utf8'));if(doc.version!==1||!Number.isSafeInteger(doc.revision)||doc.revision<0)throw new Error('PDF 필기 형식을 확인해 주세요.');validateObjects(doc.objects);return doc;};
+    const read=async filename=>{const doc=JSON.parse(await fs.readFile(filename,'utf8'));if(doc.version!==1||!Number.isSafeInteger(doc.revision)||doc.revision<0)throw new Error('PDF 필기 형식을 확인해 주세요.');validateObjects(doc.objects);if(note.documentType==='drawing'){doc.pageIds=drawing.validatePages(drawing.pageIds(note,doc));}return doc;};
     try{return await sync.replay(file,await read(file),'objects',validateObjects);}catch(error){try{return {...await sync.replay(file,await read(file+'.backup'),'objects',validateObjects),recovered:true};}catch{throw new Error('PDF 필기를 읽지 못했습니다. 원본 PDF와 필기 파일을 보존했습니다.');}}
   }
   index(payload) {
@@ -66,19 +68,22 @@ class PDFs {
       const note=this.note(payload.id,true), current=await this.read(note.id);
       if(payload.revision!==current.revision) { const e=new Error('다른 기기에서 PDF가 변경되었습니다. 내 필기를 보존하고 최신 내용을 확인해 주세요.'); e.code='CONFLICT'; throw e; }
       let requested=payload.objects;if(payload.patch){if(!Array.isArray(payload.patch.upsert)||!Array.isArray(payload.patch.remove)||payload.patch.remove.some(id=>typeof id!=='string'))throw Error('필기 변경 형식을 확인해 주세요.');validateObjects(payload.patch.upsert);const removed=new Set(payload.patch.remove),changed=new Map(payload.patch.upsert.map(o=>[o.id,o]));requested=current.objects.filter(o=>!removed.has(o.id)).map(o=>{const next=changed.get(o.id)||o;changed.delete(o.id);return next;}).concat([...changed.values()]);}
-      const objects=validateObjects(requested); if(objects.some(o=>o.page>note.pages))throw new Error('PDF 페이지를 확인해 주세요.');
-      const doc={version:1,revision:current.revision+1,objects,updatedAt:new Date().toISOString()};
+      const ids=note.documentType==='drawing'?drawing.validatePages(payload.pageIds||drawing.pageIds(note,current)):null;if(payload.pageIds&& !ids)throw Error('페이지 관리는 새 그리기에서 지원합니다.');
+      const objects=validateObjects(ids&&(payload.pageIds||requested.some(o=>o.pageId))?drawing.normalizeObjects(requested,ids):requested); if(objects.some(o=>o.page>(ids?.length||note.pages)))throw new Error('PDF 페이지를 확인해 주세요.');
+      const doc={version:1,revision:current.revision+1,objects,...(ids?{pageIds:ids}:{}),updatedAt:new Date().toISOString()};
       if(current.recovered)await fs.copyFile(path.join(this.library.recordings,note.id,'annotations.json'),path.join(this.library.recordings,note.id,'annotations.damaged-'+Date.now()+'.json'));
-      if(payload.patch)await sync.append(this.library,path.join(this.library.recordings,note.id,'annotations.json'),current,doc,payload.patch);else {
+      if(payload.patch&&!payload.pageIds)await sync.append(this.library,path.join(this.library.recordings,note.id,'annotations.json'),current,doc,payload.patch);else {
       await atomicJson(path.join(this.library.recordings,note.id,'annotations.json.backup'),current);
       await atomicJson(path.join(this.library.recordings,note.id,'annotations.json'),doc);await sync.reset(this.library,path.join(this.library.recordings,note.id,'annotations.json'),doc);sync.forget(this.library,path.join(this.library.recordings,note.id,'annotations.json'));}
-      const result=this.library.documentChanged(note.id,'pdf',doc,{editedAt:doc.updatedAt});return payload.ack?{revision:result.revision,updatedAt:result.updatedAt}:result;
+      const result=this.library.documentChanged(note.id,'pdf',doc,{editedAt:doc.updatedAt,...(ids?{pages:ids.length}:{} )});if(ids&&ids.length!==note.pages)this.library.emitChange({id:note.id,kind:'metadata',note:require('../shared/library-summary.cjs').summary(this.note(note.id))});return payload.ack?{revision:result.revision,updatedAt:result.updatedAt}:result;
     });
   }
   async changes({id,since}){const doc=await this.read(id);return sync.changes(this.library,path.join(this.library.recordings,id,'annotations.json'),doc,since,'objects');}
   async export(id, annotated, fontFile) {
-    const original=await fs.readFile(this.file(id)); if(!annotated)return original;
-    const { PDFDocument,rgb }=require('pdf-lib'), doc=await PDFDocument.load(original,{updateMetadata:false}), data=await this.read(id);
+    const original=await fs.readFile(this.file(id)),note=this.note(id); if(!annotated&&note.documentType!=='drawing')return original;
+    const { PDFDocument,rgb }=require('pdf-lib'), data=await this.read(id),doc=note.documentType==='drawing'?await PDFDocument.create():await PDFDocument.load(original,{updateMetadata:false});
+    if(note.documentType==='drawing')for(const id of drawing.pageIds(note,data))doc.addPage([595.28,841.89]);
+    if(!annotated)return Buffer.from(await doc.save());
     let font; if(data.objects.some(o=>o.type==='text')) { doc.registerFontkit(require('@pdf-lib/fontkit')); font=await doc.embedFont(await fs.readFile(fontFile),{subset:false}); }
     for(const o of data.objects) {
       const page=doc.getPage(o.page-1), color=rgb(...o.color.slice(1).match(/../g).map(v=>parseInt(v,16)/255)), opacity=o.type==='highlight'?.3:1;

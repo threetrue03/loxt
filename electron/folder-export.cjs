@@ -95,11 +95,11 @@ async function exportFolder(payload, { library, dialog, mainWindow }) {
       const location = directory(note.folder) + safeName(note.title) + ' [' + note.id + ']/';
       zip.addEmptyDirectory(location);
       if (note.kind === 'pdf') {
-        zip.addFile(path.join(library.recordings,note.id,'original.pdf'),location + '원본.pdf');
+        if(note.documentType==='drawing')zip.addBuffer(await new (require('./pdfs.cjs').PDFs)(library).export(note.id,false),location+'원본.pdf');else zip.addFile(path.join(library.recordings,note.id,'original.pdf'),location + '원본.pdf');
         zip.addBuffer(Buffer.from(JSON.stringify(await new (require('./pdfs.cjs').PDFs)(library).read(note.id),null,2)),location+'필기.json');
       } else if (note.kind !== 'memo') {
         if (typeof note.audioFile !== 'string' || path.basename(note.audioFile) !== note.audioFile) throw new Error('원본 녹음 경로를 확인해 주세요.');
-        zip.addFile(path.join(library.recordings, note.id, note.audioFile), location + '원본' + path.extname(note.audioFile));
+        if(!note.audioMissing)zip.addFile(path.join(library.recordings, note.id, note.audioFile), location + '원본' + path.extname(note.audioFile));
         if (note.done || note.segments?.length) zip.addBuffer(Buffer.from('\ufeff' + note.title + '\n\n' + (note.segments || []).map(segment => `[${time(segment.start)}] ${segment.speaker ? segment.speaker + ' · ' : ''}${segment.text}`).join('\n'), 'utf8'), location + '스크립트.txt');
       }
       if (snapshot.documents[note.id]) {

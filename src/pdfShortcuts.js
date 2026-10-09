@@ -1,0 +1,1 @@
+export const pdfShortcuts={select:'Esc · Delete: 선택한 필기 삭제',hand:'Space 누른 채 드래그',pen:'Ctrl + Shift + E',erase:'Ctrl + Shift + E',highlight:'Ctrl + Shift + H',text:'T',shape:'Ctrl + D',undo:'Ctrl + Z',redo:'Ctrl + Shift + Z',search:'Ctrl + F'};

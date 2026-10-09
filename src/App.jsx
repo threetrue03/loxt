@@ -20,6 +20,7 @@ import Menu from './Menu.jsx';
 import Select from './Select.jsx';
 import TaskPanel from './TaskPanel.jsx';
 import YouTubeDialog, { YouTubeProgress } from './YouTubeDialog.jsx';
+import useSidebarShortcut from './useSidebarShortcut.js';
 import FolderTree, { folderName as leafName, parentOf } from './FolderTree.jsx';
 import FolderBreadcrumb from './FolderBreadcrumb.jsx';
 import FolderCard from './FolderCard.jsx';
@@ -33,7 +34,7 @@ import { formatTime, folderStorageKey, loadFolders } from './data.js';
 
 const filterNames = { all: '홈', library: '모든 기록', recent: '최근 기록', trash: '휴지통', '': '내 보관함' };
 
-export default function App({ workspaceActive = true, liveActive = false, onWorkspaceChange, onBackgroundChange }) {
+export default function App({ onRecordingActivity, workspaceActive = true, liveActive = false, onWorkspaceChange, onBackgroundChange }) {
   const [notes, setNotes] = useState([]);
   const [folders, setFolders] = useState([]);
   const [folderParents, setFolderParents] = useState({});
@@ -58,6 +59,7 @@ export default function App({ workspaceActive = true, liveActive = false, onWork
   const [sidebarParent, setSidebarParent] = useState('');
   const [actionMenu, setActionMenu] = useState(null);
   const [renaming, setRenaming] = useState(null);
+  useSidebarShortcut(workspaceActive,setSidebarCollapsed);
   const [trashSelection, setTrashSelection] = useState([]);
   const [trashWorking, setTrashWorking] = useState(false);
   const [notice, setNotice] = useState('');
@@ -66,6 +68,7 @@ export default function App({ workspaceActive = true, liveActive = false, onWork
   const [recovery, setRecovery] = useState(null);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
+  useEffect(()=>onRecordingActivity?.(busy),[busy,onRecordingActivity]);
   const [environment, setEnvironment] = useState(null);
   const [imports, setImports] = useState([]);
   const backgroundEnvironment = { ...environment, queue: [...(environment?.queue || []), ...imports] };
@@ -221,8 +224,9 @@ export default function App({ workspaceActive = true, liveActive = false, onWork
     catch { toast('저장 폴더를 열지 못했습니다.'); }
   }
   function changeLayout(value) { return sharedSettings.change('work', { layout: value }); }
-  useEffect(() => { const open = event => { if(event.detail.mode === 'work') { newRecording(); if (!draftOpen) setDraftFolder(event.detail.folder || ''); } }; window.addEventListener('loxt:open-recording',open); return () => window.removeEventListener('loxt:open-recording',open); }, [draftOpen, sharedSettings.ready]);
+  useEffect(() => { const open = event => { if(event.detail.mode === 'work') { newRecording(); if (!draftOpen) setDraftFolder(event.detail.folder || ''); } }; window.addEventListener('loxt:open-recording',open); return () => window.removeEventListener('loxt:open-recording',open); }, [draftOpen, sharedSettings.ready,busy]);
   function newRecording() {
+    if (busy) return;
     if (!sharedSettings.ready) { toast('설정을 확인한 뒤 다시 시작해 주세요.'); return; }
     if (draftOpen) { setSelectedId(null); setView('workspace'); return; }
     setDraftFolder(folders.includes(filter) ? filter : ''); setDraftOpen(true); setSelectedId(null); setDraftKey(value => value + 1); setView('workspace');
@@ -306,8 +310,8 @@ export default function App({ workspaceActive = true, liveActive = false, onWork
     <aside className="sidebar">{view === 'settings' ? <>
       <SettingsSidebar/>
     </> : <>
-      <div className="brand"><button className="sidebar-toggle" onClick={() => setSidebarCollapsed(value => !value)} aria-label={sidebarCollapsed ? '사이드바 펼치기' : '사이드바 접기'} aria-expanded={!sidebarCollapsed}><Icon name="sidebar"/></button></div>
-      <button className="primary sidebar-create" onClick={newRecording} disabled={!loaded}><Icon name="mic"/><span className="label">새 녹음</span></button>
+      <div className="brand"><button className="sidebar-toggle" title="사이드바 열기·닫기 · Ctrl + Shift + S" onClick={() => setSidebarCollapsed(value => !value)} aria-label={sidebarCollapsed ? '사이드바 펼치기' : '사이드바 접기'} aria-expanded={!sidebarCollapsed}><Icon name="sidebar"/><span className="label">사이드바 닫기</span></button></div>
+      <button className="primary sidebar-create" onClick={newRecording} disabled={!loaded || busy}><Icon name="mic"/><span className="label">새 녹음</span></button>
       <button className="upload" disabled={!loaded || busy} onClick={importAudio}><Icon name="upload"/><span className="label">파일 불러오기</span></button>
       {!window.desktop.remote && <button className="upload" disabled={!loaded} onClick={() => setModal({ type: 'youtube' })} title="YouTube 불러오기"><Icon name="youtube"/><span className="label">YouTube 불러오기</span></button>}
       <nav className="nav" aria-label="녹음 목록">{[['all', 'home'], ['recent', 'clock'], ['trash', 'trash']].map(([key, icon]) => <button key={key} className={filter === key && view === 'list' ? 'active' : ''} onClick={() => navigate(key)} title={filterNames[key]}><Icon name={icon}/><span className="label">{filterNames[key]}</span></button>)}</nav>
@@ -321,7 +325,7 @@ export default function App({ workspaceActive = true, liveActive = false, onWork
       {view === 'list' && filter === 'all' ? <HomePage mode="work" loaded={loaded} busy={busy} notes={notes} folders={folders} parents={folderParents} recent={recent} jobs={backgroundEnvironment.queue.filter(job => !job.workspace || job.workspace === 'work')} recording={busy && draftOpen ? { title: 'Work 녹음', status: '녹음으로 돌아가 계속 기록하세요.', onOpen: () => { setSelectedId(null); setView('workspace'); } } : null} onRecord={newRecording} onImport={importAudio} onYouTube={() => setModal({type:'youtube'})} onMemo={newMemo} onFolder={() => createFolderInline('')} onLibrary={() => navigate('library')} onRoot={() => navigate('')} onJob={openBackgroundJob}
         renderNote={note => <NoteCard key={note.id} note={note} onOpen={() => openNote(note.id)} onMenu={(event, context) => openActions(event, { type: 'note', id: note.id, folder: note.folder, deleted: note.deleted }, context)} editing={renaming?.type === 'note' && renaming.id === note.id} onRename={title => changeNoteFromMenu(note.id, { title })} onCancelRename={() => setRenaming(null)}/>}
         renderFolder={folder => <FolderCard key={folder} folder={folder} name={leafName(folder, folderParents)} onOpen={() => navigate(folder)} onMenu={(event, context) => openFolderMenu(event, folder, context)}/>}
-      /> : view === 'list' ? <LibraryView mode="work" renameTarget={renaming} onRenameEnd={() => setRenaming(null)} folder={filter} active={workspaceActive} onNavigate={navigate} onOpen={openNote} onRecord={(_mode,folder) => { newRecording(); if (!draftOpen) setDraftFolder(folder); }} onImport={importAudio} onYouTube={() => setModal({type:'youtube'})}/> : null}
+      /> : view === 'list' ? <LibraryView recordingBusy={busy} mode="work" renameTarget={renaming} onRenameEnd={() => setRenaming(null)} folder={filter} active={workspaceActive} onNavigate={navigate} onOpen={openNote} onRecord={(_mode,folder) => { newRecording(); if (!draftOpen) setDraftFolder(folder); }} onImport={importAudio} onYouTube={() => setModal({type:'youtube'})}/> : null}
       {draftOpen ? <div className="workspace-host" hidden={view !== 'workspace' || selectedId !== null}><NoteDetail workspaceActive={workspaceActive} note={null} environment={environment} folders={folders} folderParents={folderParents} initialFolder={draftFolder} onFinish={finishRecording} onDiscard={discardDraft} onBusy={setBusy} onNotice={toast} preferences={preferences} onPreferences={changePreferences} draftKey={draftKey} onBack={() => navigate(filter)}/></div> : null}
       {selected && (view === 'workspace' || (view === 'settings' && pageView === 'workspace')) ? <div className="workspace-host" hidden={view !== 'workspace'}>{selected.kind === 'pdf' ? <PdfHost note={selected} mode="work" onBack={() => navigate(filter)} onUpdate={change => updateNote(selected.id,change)}/> : selected.kind === 'memo' ? <MemoPage key={selected.id} note={selected} onBack={() => navigate(filter)} onUpdate={change => updateNote(selected.id, change)}/> : <NoteDetail workspaceActive={workspaceActive} note={selected} environment={environment} folders={folders} folderParents={folderParents} onCopy={copyTranscript} onConvert={convertSelected} onCancel={() => cancelTranscription(selected.id)} onBack={() => navigate(filter)} onUpdate={change => updateNote(selected.id, change)} onExport={exportTranscript}/>}</div> : null}
       {view === 'settings' ? <SettingsPage mode="work"/> : null}

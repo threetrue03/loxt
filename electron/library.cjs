@@ -68,6 +68,7 @@ class Library {
   }
   enqueue(work) {
     const result = this.queue.then(() => this.ready).then(() => {
+      if (this.audioTransferPending) throw new Error('녹음 원본 이동을 마치지 못했습니다. 앱을 다시 실행해 주세요.');
       if (this.folderRenamePending) throw new Error('폴더 변경 저장을 마치지 못했습니다. 앱을 다시 실행해 주세요. 원본은 유지됩니다.');
       if (this.trashDeletePending) throw new Error('휴지통 삭제를 마치지 못했습니다. 앱을 다시 실행해 주세요.');
       return work();
@@ -81,6 +82,8 @@ class Library {
     if (await exists(journalPath)) await this.commitFolderRename(JSON.parse(await fs.readFile(journalPath, 'utf8')));
     const trashJournal = path.join(this.root, 'trash-delete.json');
     if (await exists(trashJournal)) await this.commitTrashDelete(JSON.parse(await fs.readFile(trashJournal, 'utf8')));
+    const audioJournal = path.join(this.root,'audio-transfer.json');
+    if (await exists(audioJournal)) await require('./audio-trash.cjs').commitAudioTransfer(this,JSON.parse(await fs.readFile(audioJournal,'utf8')));
     let recovery = null;
     try { this.data = this.validateIndex(JSON.parse(await fs.readFile(this.index, 'utf8'))); }
     catch (error) {
@@ -133,7 +136,9 @@ class Library {
         note.status = 'ready';
         await atomicJson(path.join(directory, 'note.json'), note);
       }
-      if (!(await exists(audio))) continue;
+      if (!(await exists(audio)) && !(note.audioMissing && note.done)) continue;
+      // Page operations persist the complete drawing snapshot before deferred metadata.
+      if(note.documentType==='drawing'){try{const doc=JSON.parse(await fs.readFile(path.join(directory,'annotations.json'),'utf8'));if(doc.version===1&&Array.isArray(doc.pageIds)){const ids=require('./drawing-pages.cjs').validatePages(doc.pageIds);if(note.pages!==ids.length){note.pages=ids.length;await atomicJson(path.join(directory,'note.json'),note);changed=true;}}}catch{ /* The PDF reader reports invalid annotations without changing the original. */ }}
       if (note.folder && note.folder.length <= 1024 && !this.data.folders.includes(note.folder)) {
         const parts = note.folder.split('/');
         for (let i = 1; i <= parts.length; i++) {
@@ -158,7 +163,7 @@ class Library {
     }
     if (recovery) {
       const available = [];
-      for (const note of this.data.notes) { if (await exists(path.join(this.recordings, note.id, note.kind === 'memo' ? 'note.json' : note.audioFile))) available.push(recoverConversion(note)); else recovery.skipped++; }
+      for (const note of this.data.notes) { if (note.audioMissing && note.done || await exists(path.join(this.recordings, note.id, note.kind === 'memo' ? 'note.json' : note.audioFile))) available.push(recoverConversion(note)); else recovery.skipped++; }
       this.data.notes = available;
     }
     if (changed || !(await exists(this.index))) { this.validateIndex(this.data); await this.saveIndex(this.data, !recovery); }
@@ -318,7 +323,8 @@ class Library {
   }
   restoreTrash(ids) {
     return this.enqueue(async () => {
-      const changed = this.trashNotes(ids).map(note => ({ ...note, deleted: false, folder: this.data.folders.includes(note.folder) ? note.folder : '' }));
+      const selected=this.trashNotes(ids); if(selected.some(n=>n.kind==='audio'&&n.parentRecordingId)) return require('./audio-trash.cjs').restoreDetached(this,selected);
+      const changed = selected.map(note => ({ ...note, deleted: false, folder: this.data.folders.includes(note.folder) ? note.folder : '' }));
       const mapped = new Map(changed.map(note => [note.id, note]));
       const next = { ...this.data, notes: this.data.notes.map(note => mapped.get(note.id) || note) };
       const journal = { version: 1, data: next, notes: changed };
@@ -366,6 +372,7 @@ class Library {
       return this.snapshot();
     });
   }
+  detachAudio(id) { return require('./audio-trash.cjs').detachAudio.call(this,id); }
   discardRecording(id) {
     return this.enqueue(async () => {
       if (!ID.test(id)) throw new Error('녹음을 찾지 못했습니다.');
@@ -512,7 +519,7 @@ class Library {
   setTranscription(id, changes) {
     return this.enqueue(async () => {
       const note = this.data.notes.find(n => n.id === id);
-      if (!note || ['memo','pdf'].includes(note.kind) || (note.deleted && changes.status === 'transcribing') || note.status === 'recording') throw new Error('전사할 원본을 찾지 못했습니다.');
+      if (!note || note.audioMissing || ['memo','pdf'].includes(note.kind) || (note.deleted && changes.status === 'transcribing') || note.status === 'recording') throw new Error('전사할 원본을 찾지 못했습니다.');
       return this.saveNote({ ...note, ...changes });
     });
   }
@@ -538,7 +545,7 @@ class Library {
     await this.ready;
     if (!ID.test(id)) throw new Error('잘못된 녹음 ID입니다.');
     const note = this.data.notes.find(n => n.id === id);
-    if (!note || ['memo','pdf'].includes(note.kind) || !MIME[path.extname(note.audioFile)] || path.basename(note.audioFile) !== note.audioFile) throw new Error('녹음을 찾지 못했습니다.');
+    if (!note || note.audioMissing || ['memo','pdf'].includes(note.kind) || !MIME[path.extname(note.audioFile)] || path.basename(note.audioFile) !== note.audioFile) throw new Error('녹음을 찾지 못했습니다.');
     return { filename: path.join(this.recordings, id, note.audioFile), mime: note.mime };
   }
 }

@@ -2,7 +2,7 @@ import { DialogContext } from './DialogContext.js';
 import { useContext, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
-export default function Menu({ label, trigger, children, className = '', disabled = false, upward = false }) {
+export default function Menu({ label, trigger, children, className = '', disabled = false, upward = false, shortcut }) {
   const dialog = useContext(DialogContext);
   const [open, setOpen] = useState(false);
   const root = useRef(null), button = useRef(null), panel = useRef(null);
@@ -20,6 +20,7 @@ export default function Menu({ label, trigger, children, className = '', disable
     };
     function outside(event) { if (root.current && !root.current.contains(event.target) && !popup.contains(event.target)) setOpen(false); }
     function keys(event) {
+      const numeric=popup.querySelector(`[data-shortcut-key="${event.key}"]`);if(numeric&&!event.altKey){event.preventDefault();event.stopPropagation();numeric.click();return;}
       if (event.key === 'Escape') { event.preventDefault(); setOpen(false); button.current.focus(); }
       if (event.key === 'Tab') {
         setOpen(false);
@@ -43,5 +44,5 @@ export default function Menu({ label, trigger, children, className = '', disable
     return () => { observer.disconnect(); document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', keys); window.removeEventListener('resize', place); };
   }, [open, upward]);
   function close() { setOpen(false); button.current?.focus(); }
-  return <div ref={root} className={`menu-control ${className} ${upward ? 'menu-up' : ''}`}><button ref={button} className="menu-trigger" type="button" aria-label={label} aria-haspopup="menu" aria-expanded={open} disabled={disabled} onClick={() => setOpen(value => !value)} onKeyDown={event => { if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); setOpen(true); } }}>{trigger}</button>{open ? createPortal(<div ref={panel} className={`menu-popover unified-menu ${className}`} role="menu" aria-label={label}>{children(close)}</div>, root.current?.closest('.document-fullscreen') || dialog?.current || document.body) : null}</div>;
+  return <div ref={root} className={`menu-control ${className} ${upward ? 'menu-up' : ''}`}><button ref={button} className="menu-trigger" type="button" aria-label={label} title={shortcut?`${label} · ${shortcut}`:label} aria-haspopup="menu" aria-expanded={open} disabled={disabled} onClick={() => setOpen(value => !value)} onKeyDown={event => { if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); setOpen(true); } }}>{trigger}</button>{open ? createPortal(<div ref={panel} className={`menu-popover unified-menu ${className}`} role="menu" aria-label={label}>{children(close)}</div>, root.current?.closest('.document-fullscreen') || dialog?.current || document.body) : null}</div>;
 }

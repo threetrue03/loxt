@@ -18,7 +18,7 @@ export default function NoteCard({ note, selected, onOpen, onMenu, editing, onRe
   }, []);
   const rendered = inView || editing;
   useLayoutEffect(() => { if (rendered && focusPending.current) { focusPending.current = false; root.current.querySelector('.note-open')?.focus(); } }, [rendered]);
-  const status = note.kind === 'pdf' ? 'PDF' : note.kind === 'memo' ? '메모' : note.status === 'queued' ? '대기 중' : note.status === 'transcribing' ? '변환 중' : note.status === 'failed' ? '변환 실패' : note.status === 'partial' ? '화자 분석 실패' : note.status === 'cancelled' ? '취소됨' : note.done ? '변환 완료' : '변환 대기';
+  const status = note.kind === 'audio' ? '녹음 원본' : note.audioMissing ? '스크립트' : note.kind === 'pdf' ? 'PDF' : note.kind === 'memo' ? '메모' : note.status === 'queued' ? '대기 중' : note.status === 'transcribing' ? '변환 중' : note.status === 'failed' ? '변환 실패' : note.status === 'partial' ? '화자 분석 실패' : note.status === 'cancelled' ? '취소됨' : note.done ? '변환 완료' : '변환 대기';
   const tone = note.status === 'failed' ? 'failed' : ['queued', 'transcribing'].includes(note.status) ? 'working' : note.done ? 'done' : 'wait';
   const OpenTag = editing ? 'div' : 'button';
   return <article ref={root} tabIndex={rendered ? undefined : 0} aria-label={note.title} onFocus={event => { if (event.target === root.current) { focusPending.current = true; setInView(true); } }} data-note-id={note.id} className={`row note-card ${note.done ? 'transcribed' : 'untranscribed'} ${selected ? 'is-selected' : ''}`} onClick={event => { if (!editing && !event.target.closest('button,input,label,.note-preview,.inline-name')) onOpen(event); }} onContextMenu={event => onMenu(event, true)} onKeyDown={event => { if (event.target === root.current && ['Enter',' '].includes(event.key) && !editing) { event.preventDefault(); onOpen(event); } if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) onMenu(event, false); }}>
@@ -29,7 +29,7 @@ export default function NoteCard({ note, selected, onOpen, onMenu, editing, onRe
       <div className="file-icon"><Icon name={note.documentType==='drawing'?'pen':note.done?'file':'mic'}/></div>
       <div className="note-summary">
         <div className="note-title">{editing ? <InlineName value={note.title} label={note.kind === 'memo' ? '메모 이름 바꾸기' : '녹음 이름 바꾸기'} onSave={onRename} onCancel={onCancelRename}/> : note.title}</div>
-        <div className="note-folder"><Icon name="folder"/><span>{note.folder || '내 보관함'}</span>{note.recovered ? <span className="recovered-label">복구된 녹음</span> : null}</div>
+        <div className="note-folder"><Icon name="folder"/><span>{note.folder || '내 보관함'}</span>{note.kind==='audio'?<span>녹음 원본만</span>:null}{note.recovered ? <span className="recovered-label">복구된 녹음</span> : null}</div>
       </div>
     </OpenTag>
       {layout !== 'list' ? <ScriptPreview note={note} saved={previewState}/> : null}

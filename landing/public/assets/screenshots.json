@@ -1,9 +1,9 @@
 {
-  "version": "2.4.0",
+  "version": "2.5.0",
   "examples": true,
   "liveInference": false,
   "exampleAudio": "silent WAV and scripted transcript/speaker data; not accuracy or speed measurements",
-  "capturedAt": "2026-10-09T03:52:45.135Z",
+  "capturedAt": "2026-10-09T07:13:07.459Z",
   "images": [
     {
       "file": "sidebar-collapsed-work.png",
@@ -40,6 +40,12 @@
       "width": 1783,
       "height": 1079,
       "scenario": "work-attached-memo"
+    },
+    {
+      "file": "script-fullscreen.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "script-with-memo-fullscreen"
     },
     {
       "file": "memo.png",
@@ -174,6 +180,12 @@
       "scenario": "work-independent-drawing"
     },
     {
+      "file": "drawing-pages.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "drawing-page-management"
+    },
+    {
       "file": "light-pdf.png",
       "width": 1783,
       "height": 1079,
@@ -190,6 +202,12 @@
       "width": 1783,
       "height": 1079,
       "scenario": "memo-document-fullscreen"
+    },
+    {
+      "file": "script-only.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "audio-only-trash-keeps-script-memo"
     },
     {
       "file": "device-settings.png",

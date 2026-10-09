@@ -288,6 +288,7 @@ function memoFor(id) {
   return new Memos(stores[0]);
 }
 const pdfFor = workspace => new (require('./pdfs.cjs').PDFs)(workspaceLibraries.get(workspace));
+handle('library:detach-audio',payload=>{const id=payload.id;if(pendingMemoIds.has(id)||conversions.snapshot().queue.some(job=>job.id===id)||live?.busy&&live.state.id===id)throw Error('녹음·변환·메모 저장을 마친 뒤 원본을 삭제해 주세요.');return workspaceLibraries.get(payload.workspace).detachAudio(id);});
 handle('pdf:create',p=>pdfFor(p.workspace).create(p.folder||''));
 handle('pdf:info',p=>pdfFor(p.workspace).info(p.id));
 handle('pdf:prepare-index',p=>pdfFor(p.workspace).prepareIndex(p.id));

@@ -1,3 +1,6 @@
+import DocumentHeader from './DocumentHeader.jsx';
+import DocumentFullscreenContext from './DocumentFullscreenContext.js';
+import {useDocumentFullscreen} from './documentView.js';
 import { useEffect, useRef, useState } from 'react';
 import Icon from './Icon.jsx';
 import Menu from './Menu.jsx';
@@ -28,6 +31,7 @@ export default function RecordingPage({ workspaceActive = true, folderParents, f
   const [error, setError] = useState('');
   const [outputStatus, setOutputStatus] = useState('');
   const [stored, setStored] = useState(null);
+  const documentRoot=useRef(null); const [fullscreen,toggleFullscreen]=useDocumentFullscreen(documentRoot);
   const [review, setReview] = useState(false);
   const [conversionReady, setConversionReady] = useState(false);
   const [memoId, setMemoId] = useState(null), [memoOpen, setMemoOpen] = useState(false);
@@ -243,10 +247,10 @@ export default function RecordingPage({ workspaceActive = true, folderParents, f
   }
   const active = !['ready', 'stopped'].includes(state);
   const statusText = { ready: '녹음 준비', starting: '마이크 연결 중', recording: '녹음 중 · 원본 자동 저장', paused: '일시정지됨', saving: '원본 저장 중', stopped: '원본 저장 완료', 'save-error': '저장 실패' }[state];
-  return <section className="content workspace recording-workspace">
-    <div className="heading workspace-heading"><button className="back" onClick={onBack}>← 녹음 목록</button><div className="workspace-title detail-title"><input className="recording-title" aria-label="녹음 제목" value={title} maxLength={120} onChange={event => setTitle(event.target.value)} onBlur={() => { if (!title.trim()) setTitle('새 녹음'); }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); }}/></div></div>
+  return <DocumentFullscreenContext.Provider value={[fullscreen,toggleFullscreen]}><section ref={documentRoot} className={`content workspace recording-workspace ${fullscreen?"document-fullscreen":""}`}>
+    <DocumentHeader onBack={onBack} status={statusText} title={title} onTitle={setTitle} onSave={()=>{if(!title.trim())setTitle("새 녹음");}} folder={folder} label="녹음 제목"/>
     {error ? <p className="error-message" role="alert">{error}</p> : null}
-    <ResizableDocuments open={memoOpen}><div className="transcript-frame"><div className="detail-tabs"><span>스크립트</span><div className="script-actions"><button className="script-export" aria-label="메모 열기" aria-expanded={memoOpen} disabled={!memoId || state === 'discarding'} onClick={() => setMemoOpen(value => !value)}><Icon name="file"/>메모</button></div></div><div className="transcript" role="region" aria-label="스크립트" tabIndex="0"><div className="empty">{stored ? '저장할 폴더와 모델을 선택하면 변환을 시작합니다.' : '녹음을 중단한 뒤 변환하기를 눌러 음성을 스크립트로 변환합니다.'}</div></div></div><aside className="memo-panel" aria-label="녹음 메모" inert={!memoOpen || undefined}>{memoId ? <MemoHost id={memoId} title={title + ' 메모'} compact onClose={() => setMemoOpen(false)}/> : null}</aside></ResizableDocuments>
+    <ResizableDocuments open={memoOpen}><div className="transcript-frame"><div className="detail-tabs"><span>스크립트</span><div className="script-actions"><button className="script-export" aria-label="메모 열기" aria-expanded={memoOpen} disabled={!memoId || state === 'discarding'} onClick={() => setMemoOpen(value => !value)}><Icon name="file"/>메모</button><button className="script-export" title={fullscreen?"전체화면 종료":"전체화면"} aria-label={fullscreen?"전체화면 종료":"전체화면"} aria-pressed={fullscreen} onClick={toggleFullscreen}><Icon name={fullscreen?"collapse":"expand"}/></button></div></div><div className="transcript" role="region" aria-label="스크립트" tabIndex="0"><div className="empty">{stored ? '저장할 폴더와 모델을 선택하면 변환을 시작합니다.' : '녹음을 중단한 뒤 변환하기를 눌러 음성을 스크립트로 변환합니다.'}</div></div></div><aside className="memo-panel" aria-label="녹음 메모" inert={!memoOpen || undefined}>{memoId ? <MemoHost id={memoId} title={title + ' 메모'} compact onClose={() => setMemoOpen(false)}/> : null}</aside></ResizableDocuments>
     <div className="bottom-controls">
     <div className={`recording ${state === 'recording' ? 'is-recording' : state === 'paused' ? 'is-paused' : state === 'stopped' ? 'is-stopped' : ''}`}>
       {state !== 'ready' ? <div className="record-state" role="status">{statusText}</div> : null}
@@ -261,5 +265,5 @@ export default function RecordingPage({ workspaceActive = true, folderParents, f
     </div>
     </div>
     {review ? <ConversionDialog folders={folders} parents={folderParents} initialFolder={folder} environment={environment} onClose={() => setReview(false)} onConfirm={convert}/> : null}
-  </section>;
+  </section></DocumentFullscreenContext.Provider>;
 }

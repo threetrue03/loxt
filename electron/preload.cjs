@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld('desktop', Object.freeze({
     onCloseTab: callback => { const listener = () => callback(); ipcRenderer.on('browser:close-tab', listener); return () => ipcRenderer.removeListener('browser:close-tab', listener); },
     onShortcut: callback => { const listener = (_event, value) => callback(value); ipcRenderer.on('browser:shortcut', listener); return () => ipcRenderer.removeListener('browser:shortcut', listener); },
   }),
+  detachAudio: payload => ipcRenderer.invoke('library:detach-audio',payload),
   manageLibrary: payload => ipcRenderer.invoke('library:manage', payload),
   searchLibrary: payload => ipcRenderer.invoke('library:search', payload),
   memos: Object.freeze({

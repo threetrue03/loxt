@@ -31,7 +31,7 @@ export default function useLibrarySelection({ visible, enabled, onMove, scope })
       setIds(item.ids); suppress.current = true;
       update(item.px, item.py);
     }, 280);
-    else { event.preventDefault(); setIds(item.base); }
+    else { event.preventDefault(); event.currentTarget.focus({preventScroll:true}); setIds(item.base); }
     function scroll() {
       if (gesture.current !== item) return;
       const box = host.getBoundingClientRect();

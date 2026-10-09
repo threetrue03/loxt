@@ -1,3 +1,4 @@
+import RecordingActivityContext from './RecordingActivityContext.js';
 import WorkspaceBoundary from './WorkspaceBoundary.jsx';
 import { useCallback, useState } from 'react';
 import App from './App.jsx';
@@ -10,6 +11,8 @@ export default function WorkspaceShell() {
     catch { return 'work'; }
   });
   const [visitedLive, setVisitedLive] = useState(workspace === 'live');
+  const [recordingActivity,setRecordingActivity]=useState({work:false,live:false});
+  const workRecording=useCallback(value=>setRecordingActivity(old=>({...old,work:value})),[]),liveRecording=useCallback(value=>setRecordingActivity(old=>({...old,live:value})),[]);
   const [workActive, setWorkActive] = useState(false);
   const [liveActive, setLiveActive] = useState(false);
   const [liveReturn, setLiveReturn] = useState(0);
@@ -22,5 +25,5 @@ export default function WorkspaceShell() {
     requestAnimationFrame(() => document.querySelector('.workspace-panel:not([hidden]) .workspace-menu .menu-trigger')?.focus());
   }, []);
   // Keep Work mounted: its recorder and conversion subscriptions must survive switching.
-  return <PanelProvider workspace={workspace} onWorkspaceChange={changeWorkspace}><div className="workspace-panel" data-workspace="work" hidden={workspace !== 'work'}><WorkspaceBoundary><App liveActive={liveActive} workspaceActive={workspace === 'work'} onWorkspaceChange={changeWorkspace} onBackgroundChange={setWorkActive}/></WorkspaceBoundary></div>{visitedLive ? <div className="workspace-panel" data-workspace="live" hidden={workspace !== 'live'}><WorkspaceBoundary><LiveWorkspace returnToRecording={liveReturn} onBackgroundChange={setLiveActive} active={workspace === 'live'} workActive={workActive} onWorkspaceChange={changeWorkspace}/></WorkspaceBoundary></div> : null}</PanelProvider>;
+  return <RecordingActivityContext.Provider value={recordingActivity}><PanelProvider workspace={workspace} onWorkspaceChange={changeWorkspace}><div className="workspace-panel" data-workspace="work" hidden={workspace !== 'work'}><WorkspaceBoundary><App onRecordingActivity={workRecording} liveActive={liveActive} workspaceActive={workspace === 'work'} onWorkspaceChange={changeWorkspace} onBackgroundChange={setWorkActive}/></WorkspaceBoundary></div>{visitedLive ? <div className="workspace-panel" data-workspace="live" hidden={workspace !== 'live'}><WorkspaceBoundary><LiveWorkspace onRecordingActivity={liveRecording} returnToRecording={liveReturn} onBackgroundChange={setLiveActive} active={workspace === 'live'} workActive={workActive} onWorkspaceChange={changeWorkspace}/></WorkspaceBoundary></div> : null}</PanelProvider></RecordingActivityContext.Provider>;
 }

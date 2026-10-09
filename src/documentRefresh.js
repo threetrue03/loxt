@@ -11,7 +11,7 @@ export function requestDocumentRefresh(entry,api,field,publish,revision=Infinity
   if(entry.state.dirty||entry.state.saving||entry.state.revision!==since)return;
   let doc=value.snapshot||value;
   if(value.patches){let items=entry.state[field],current=since;for(const record of value.patches){if(record.base!==current)throw Error('문서 갱신 순서가 일치하지 않습니다.');items=applyDocumentPatch(items,record.patch);current=record.revision;}doc={revision:current,[field]:items,updatedAt:value.updatedAt};}
-  if(doc.revision>since){entry[field==='blocks'?'savedBlocks':'savedObjects']=doc[field];publish(entry,doc);documentTiming(entry.key||entry.id,'applied',doc.revision,entry.remoteRequestId);if(typeof requestAnimationFrame==='function')requestAnimationFrame(()=>documentTiming(entry.key||entry.id,'renderFrame',doc.revision,entry.remoteRequestId));}
+  if(doc.revision>since){entry[field==='blocks'?'savedBlocks':'savedObjects']=doc[field];if(doc.pageIds)entry.savedPageIds=doc.pageIds;publish(entry,doc);documentTiming(entry.key||entry.id,'applied',doc.revision,entry.remoteRequestId);if(typeof requestAnimationFrame==='function')requestAnimationFrame(()=>documentTiming(entry.key||entry.id,'renderFrame',doc.revision,entry.remoteRequestId));}
   if(entry.refreshSequence===sequence||entry.targetRevision<=doc.revision)entry.targetRevision=0;
  }).catch(error=>{publish(entry,{error:error.message});entry.refreshFailed=true;}).finally(()=>{entry.refresh=null;if(entry.targetRevision&&!entry.refreshFailed&&!entry.state.dirty&&!entry.state.saving)requestDocumentRefresh(entry,api,field,publish,entry.targetRevision);});
  return entry.refresh;
