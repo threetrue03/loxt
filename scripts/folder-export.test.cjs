@@ -15,6 +15,7 @@ test('folder ZIP preserves descendants, audio, script, Markdown and referenced a
   const url = await memos.attach({id:memo.id,name:'자료.txt',bytes:Buffer.from('attachment-fixture')});
   await memos.save({id:memo.id,revision:0,blocks:[{id:'text',type:'checkListItem',props:{checked:true},content:[{type:'text',text:'할 일',styles:{bold:true}}],children:[]},{id:'file',type:'file',props:{name:'자료.txt',url},content:[],children:[]}]});
   await memos.create('다른 폴더'); const trashed = (await memos.create('회의')).note; await library.updateNote(trashed.id,{deleted:true});
+  await library.flushIndex();
   const before = JSON.stringify(library.data), destination = path.join(root,'archive.zip');
   await exportFolder({folder:'회의'}, {library,dialog:{showSaveDialog:async()=>({filePath:destination})}});
   const archive = await unzipper.Open.file(destination), paths = archive.files.map(file=>file.path);

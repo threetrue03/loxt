@@ -1,3 +1,4 @@
+import {browserIdentity} from '../shared/browser-identity.js';
 import {preventPageZoom} from '../shared/web-gestures.js';
 preventPageZoom();
 import { connectWeb } from './webAdapter.js';
@@ -58,7 +59,7 @@ async function launch() {
     controller = new AbortController();
     const timeout=setTimeout(()=>controller?.abort(),10000);
     try {
-      const res = await fetch('/api/pair', { method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, name: /iPad/.test(navigator.userAgent) ? '아이패드' : /iPhone/.test(navigator.userAgent) ? '아이폰' : '웹 기기' }) });
+      const res = await fetch('/api/pair', { method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, ...browserIdentity(navigator) }) });
       const value = await res.json();
       if (current !== generation) return;
       if (value.approved) { history.replaceState(null, '', location.pathname); launch().catch(showFailure); return; }

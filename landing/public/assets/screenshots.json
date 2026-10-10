@@ -1,10 +1,10 @@
 {
-  "version": "2.8.0",
+  "version": "2.9.0",
   "examples": true,
   "liveInference": false,
   "modelCatalogExamples": true,
   "exampleAudio": "silent WAV and scripted transcript/speaker data; not accuracy or speed measurements",
-  "capturedAt": "2026-10-10T04:47:27.081Z",
+  "capturedAt": "2026-10-10T18:20:07.437Z",
   "images": [
     {
       "file": "sidebar-collapsed-work.png",
@@ -65,6 +65,12 @@
       "width": 1783,
       "height": 1079,
       "scenario": "work-memo-code-language-search"
+    },
+    {
+      "file": "memo-ros2.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "work-memo-ros2-search"
     },
     {
       "file": "memo-block-menu.png",
@@ -223,6 +229,12 @@
       "scenario": "work-independent-drawing"
     },
     {
+      "file": "drawing-fullscreen.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "drawing-edge-fullscreen"
+    },
+    {
       "file": "drawing-pages.png",
       "width": 1783,
       "height": 1079,
@@ -271,6 +283,12 @@
       "height": 844,
       "scenario": "mobile-connection-address-reentry",
       "example": true
+    },
+    {
+      "file": "device-browsers.png",
+      "width": 1783,
+      "height": 1079,
+      "scenario": "approved-browser-management"
     },
     {
       "file": "sync-diagnostics.png",

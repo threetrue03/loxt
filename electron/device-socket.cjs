@@ -20,10 +20,10 @@ function attachSockets(server,privateAddress){
    const client={ws,device,ready:false,inflight:0,alive:true,previews:new Map()};server.sockets.add(client);
    const timeout=setTimeout(()=>ws.close(1008),5000);timeout.unref();
    ws.on('error',()=>{});ws.on('pong',()=>{client.alive=true;});
-   ws.on('close',()=>{clearTimeout(timeout);server.sockets.delete(client);for(const value of client.previews.values())server.sendSockets('pdf-preview',{...value,object:null,actor:device.id,expires:0});server.previewLocal?.({actor:device.id,clear:true});});
+   ws.on('close',()=>{clearTimeout(timeout);server.sockets.delete(client);server.notify();for(const value of client.previews.values())server.sendSockets('pdf-preview',{...value,object:null,actor:device.id,expires:0});server.previewLocal?.({actor:device.id,clear:true});});
    ws.on('message',async data=>{
     let message;try{message=JSON.parse(data);if(!approved(client))throw Error('기기 연결 승인이 만료되었습니다.');
-     if(!client.ready){if(message.type!=='hello'||message.csrf!==device.csrf)throw Error('허용되지 않은 연결입니다.');client.ready=true;clearTimeout(timeout);send(client,{type:'ready'});send(client,{type:'resync',value:{}});return;}
+     if(!client.ready){if(message.type!=='hello'||message.csrf!==device.csrf)throw Error('허용되지 않은 연결입니다.');client.ready=true;server.notify();clearTimeout(timeout);send(client,{type:'ready'});send(client,{type:'resync',value:{}});return;}
      if(message.type==='ping'){send(client,{type:'pong',at:message.at});return;}
      if(message.type==='metrics'){const value=message.value;if(value&&Number.isFinite(value.rttMs)&&value.rttMs>=0&&value.rttMs<300000){client.metrics={rttMs:Math.round(value.rttMs),retries:Math.min(1000,Math.max(0,Number(value.retries)||0)),at:new Date().toISOString()};}return;}
      if(message.type==='preview'){const now=Date.now();if(now-(client.previewAt||0)<35&&message.value?.object)return;client.previewAt=now;server.preview(message.value,device.id);const key=message.value.id+':'+message.value.session;if(message.value.object){client.previews.set(key,message.value);if(client.previews.size>4)client.previews.delete(client.previews.keys().next().value);}else client.previews.delete(key);return;}

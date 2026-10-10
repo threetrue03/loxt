@@ -1,4 +1,6 @@
 const shapes = {
+  undo: <path d="M4 10h10a6 6 0 0 1 0 12M4 10l5-5M4 10l5 5"/>,
+  redo: <path d="M20 10H10a6 6 0 0 0 0 12M20 10l-5-5M20 10l-5 5"/>,
   expand: <path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"/>,
   collapse: <path d="M3 8h5V3M21 8h-5V3M8 21v-5H3M16 21v-5h5"/>,
   back: <path d="m14 5-7 7 7 7"/>,

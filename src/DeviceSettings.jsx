@@ -1,57 +1,36 @@
-import { useEffect, useRef, useState } from 'react';
-import { cleanError } from './SettingsProvider.jsx';
-
-export default function DeviceSettings() {
-  const [state, setState] = useState(null), [working, setWorking] = useState(false), [error, setError] = useState(''), [copied, setCopied] = useState('');
-  const [diagnostics,setDiagnostics]=useState(null);
-  const timer = useRef(null), busy = useRef(false);
-  useEffect(() => {
-    let active = true;
-    window.desktop.devices.get().then(value => { if (active) setState(value); }).catch(e => { if (active) setError(cleanError(e)); });
-    const off = window.desktop.devices.onState(value => { if (active) setState(value); });
-    return () => { active = false; off(); clearTimeout(timer.current); };
-  }, []);
-  async function act(fn) {
-    if (busy.current) return;
-    busy.current = true; setWorking(true); setError('');
-    try { await fn(); setState(await window.desktop.devices.get()); }
-    catch (e) { setError(cleanError(e)); }
-    finally { busy.current = false; setWorking(false); }
-  }
-  function copy(kind, index = 0) {
-    const key = `${kind}:${index}`;
-    return act(async () => {
-      await window.desktop.devices.copy(kind, index);
-      clearTimeout(timer.current); setCopied(key);
-      timer.current = setTimeout(() => setCopied(''), 2000);
-    });
-  }
-  function copyButton(kind, index, label) {
-    return <button className="secondary" disabled={working || !state?.running} onClick={() => copy(kind, index)}>{copied === `${kind}:${index}` ? '복사됨' : label}</button>;
-  }
-  return <section className="settings-section device-settings">
-    <div className="settings-row"><div><h2>같은 Wi-Fi에서 연결 허용</h2><p className="hint">승인한 아이패드·아이폰에서 이 PC의 보관함을 사용합니다.</p></div><button className="secondary" role="switch" aria-checked={state?.enabled || false} disabled={!state || working} onClick={() => act(() => window.desktop.devices.configure(!state.enabled))}>{working ? '연결 준비 중…' : state?.enabled ? '켜짐' : '꺼짐'}</button></div>
-    {(error || state?.error) ? <p role="alert" className="error-message">{error || state.error}</p> : null}
-    {state?.enabled ? <>
-      <p role="status">{state.running ? '연결 서버 실행 중' : '연결 서버 중지됨'}</p>
-      {state.running ? <>
-        <h3>처음 연결하기</h3>
-        <p className="hint">인증서를 설치·신뢰한 뒤 QR을 스캔하거나 연결 주소를 여세요. 주소와 QR은 5분간 유효하며, 이 PC에서 승인이 필요합니다.</p>
-        <div className="settings-row"><span>새 기기 연결 · QR과 같은 주소</span>{copyButton('pair', 0, '연결 주소 복사')}</div>
-        {state.qr ? <img width="180" height="180" src={state.qr} alt="LOXT 기기 연결 QR"/> : null}
-        <button className="secondary" disabled={working} onClick={() => act(() => window.desktop.devices.qr())}>새 QR 생성</button>
-        <h3>승인한 기기에서 다시 열기</h3>
-        <p className="hint">이 주소는 기존 승인을 가진 브라우저에서 사용합니다. 처음 연결하는 기기는 위의 연결 주소를 사용하세요.</p>
-        {state.addresses.map((address, index) => <div className="settings-row" key={address}><code>{address}</code>{copyButton('reconnect', index, '재접속 주소 복사')}</div>)}
-      </> : <p className="hint">연결을 다시 켠 뒤 새 주소를 사용하세요.</p>}
-      <details><summary>처음 연결하는 방법</summary><ol><li>PC와 모바일을 같은 Wi-Fi에 연결합니다.</li><li>아래 초기 설정 주소에서 공개 인증서를 내려받습니다. 인증서 지문을 이 화면과 비교하세요.</li><li>아이폰·아이패드 설정에서 인증서를 설치하고 일반 → 정보 → 인증서 신뢰 설정에서 이 PC의 LOXT 인증서를 신뢰합니다.</li><li>이 화면의 QR 또는 연결 주소를 열고 아래 연결 요청을 승인합니다.</li></ol>
-        {state.bootstrap.map((address, index) => <div className="settings-row" key={address}><code>{address}</code>{copyButton('bootstrap', index, '초기 설정 주소 복사')}</div>)}
-        <p className="hint">인증서 지문: {state.fingerprint}</p><p className="hint">인증서 만료: {state.certificateExpires?.slice(0, 10)}{state.certificateRenewed ? ' · 인증서가 갱신되었습니다. 모바일에 새 인증서를 설치하고 신뢰해 주세요.' : ''}</p>
-        <p className="hint">연결되지 않으면 Windows 방화벽의 LOXT Private 네트워크 허용과 공유기의 기기 간 통신 설정을 확인하세요. PC가 꺼지거나 앱이 종료되면 연결도 종료됩니다. 연결을 그만 사용할 때 모바일에 설치한 LOXT 인증서를 제거할 수 있습니다.</p>
-      </details>
-    </> : null}
-    {state?.pending.map(request => <div className="settings-row" key={request.id}><span>{request.name} · 연결 요청</span><div><button className="secondary" disabled={working} onClick={() => act(() => window.desktop.devices.approve(request.id, false))}>거절</button><button className="primary" disabled={working} onClick={() => act(() => window.desktop.devices.approve(request.id, true))}>승인</button></div></div>)}
-    <details><summary>동기화 진단</summary><p className="hint">요청 왕복 시간과 PC 처리 시간을 구분합니다. 최근 100개 요청의 식별자와 시간만 포함하며 문서 본문·접속 토큰은 포함하지 않습니다.</p><div className="settings-row"><span>{diagnostics?`WebSocket · 연결 ${diagnostics.connections.length}개 · 최근 PC 처리 ${diagnostics.recentRequests.at(-1)?.serverMs??'—'} ms`:'진단 정보를 확인해 주세요.'}</span><button className="secondary" onClick={()=>act(async()=>setDiagnostics(await window.desktop.devices.diagnostics()))}>새로 확인</button><button className="secondary" onClick={()=>act(()=>window.desktop.devices.copyDiagnostics())}>진단 복사</button></div>{diagnostics?.connections.map((item,index)=><p className="hint" key={index}>{item.name} · {item.ready?'연결됨':'연결 중'} · 왕복 {item.rttMs??'—'} ms · 대기 {item.pending}개 · 재시도 {item.retries??0}회</p>)}</details>
-    <h2>연결된 기기</h2>{!state?.devices.length ? <p className="hint">연결된 기기가 없습니다.</p> : state.devices.map(device => <div className="settings-row" key={device.id}><div>{device.name}<p className="hint">{device.expired?'승인 만료 · 새 연결 주소로 재승인이 필요합니다.':`승인 유효 · ${new Date(device.expires).toLocaleDateString()}까지`}</p><p className="hint">최근 연결: {device.lastSeen}</p></div><button className="secondary danger" disabled={working} onClick={() => act(() => window.desktop.devices.revoke(device.id))}>{device.expired?'목록에서 해제':'연결 해제'}</button></div>)}
-  </section>;
+import {useEffect,useRef,useState} from 'react';
+import {cleanError} from './SettingsProvider.jsx';
+import Modal from './Modal.jsx';
+const date=v=>v?new Date(v).toLocaleString('ko-KR',{dateStyle:'medium',timeStyle:'short'}):'기록 없음';
+export default function DeviceSettings(){
+ const [state,setState]=useState(null),[operation,setOperation]=useState(''),[error,setError]=useState(''),[copied,setCopied]=useState(''),[view,setView]=useState('connect'),[now,setNow]=useState(Date.now()),[diagnostics,setDiagnostics]=useState(null),[confirm,setConfirm]=useState(null),[editing,setEditing]=useState(''),[name,setName]=useState('');
+ const timer=useRef(null),busy=useRef(false),active=useRef(true);
+ useEffect(()=>{active.current=true;window.desktop.devices.get().then(v=>{if(active.current)setState(v);}).catch(e=>{if(active.current)setError(cleanError(e));});const off=window.desktop.devices.onState(v=>{if(active.current)setState(v);});return()=>{active.current=false;off();clearTimeout(timer.current);};},[]);
+ useEffect(()=>{if(!state?.running)return;const t=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(t);},[state?.running]);
+ const working=Boolean(operation),remaining=Math.max(0,Math.ceil(((state?.pairExpires||0)-now)/1000)),validQR=state?.qr&&remaining>0;
+ async function act(fn,key='action'){if(busy.current)return false;busy.current=true;setOperation(key);setError('');try{await fn();const v=await window.desktop.devices.get();if(active.current)setState(v);return true;}catch(e){if(active.current)setError(cleanError(e));return false;}finally{busy.current=false;if(active.current)setOperation('');}}
+ function copy(kind,index=0){return act(async()=>{await window.desktop.devices.copy(kind,index);if(!active.current)return;clearTimeout(timer.current);setCopied(`${kind}:${index}`);timer.current=setTimeout(()=>setCopied(''),2000);},'copy');}
+ const copyButton=(kind,index,label)=><button className="secondary" disabled={working||!state?.running} onClick={()=>copy(kind,index)}>{copied===`${kind}:${index}`?'복사됨':label}</button>;
+ function addresses(values,kind,label){return values?.length?<><div className="settings-row"><code>{values[0]}</code>{copyButton(kind,0,label)}</div>{values.length>1?<details><summary>다른 네트워크 주소 {values.length-1}개</summary><p className="hint">기기가 연결된 네트워크의 주소를 사용하세요. 모든 주소가 같은 Wi-Fi에서 연결되는 것은 아닙니다.</p>{values.slice(1).map((value,i)=><div className="settings-row" key={value}><code>{value}</code>{copyButton(kind,i+1,label)}</div>)}</details>:null}</>:<p className="hint">주소를 찾지 못했습니다. PC의 Wi-Fi 연결을 확인하세요.</p>;}
+ function browser(d){return <div className="settings-row device-browser" key={d.id}><div>{editing===d.id?<form className="device-alias" onSubmit={async e=>{e.preventDefault();if(await act(()=>window.desktop.devices.rename(d.id,name),'rename'))setEditing('');}}><label className="hint" htmlFor={`device-name-${d.id}`}>브라우저 별명</label><input autoFocus id={`device-name-${d.id}`} value={name} maxLength={80} onChange={e=>setName(e.target.value)} onKeyDown={e=>{if(e.key==='Escape'){e.stopPropagation();setEditing('');}}}/><div className="device-actions"><button className="secondary" type="button" disabled={working} onClick={()=>setEditing('')}>취소</button><button className="secondary" disabled={working||!name.trim()}>저장</button></div></form>:<><strong>{d.name}</strong>{d.browser?<span className="hint"> · {d.browser}</span>:null}<p className="hint">{d.expired?'승인 만료 · 새 연결 주소로 재승인해 주세요.':`${d.connected?'현재 접속 중':'현재 접속 없음'} · 승인 유효`}</p><p className="hint">승인 기한: {date(d.expires)}<br/>최근 접속: {date(d.lastSeen)}</p></>}</div><div className="device-actions">{!d.expired&&editing!==d.id?<button className="secondary" disabled={working} onClick={()=>{setEditing(d.id);setName(d.name);}}>이름 수정</button>:null}<button className="secondary danger" disabled={working} onClick={()=>setConfirm(d)}>{d.expired?'만료 항목 정리':'승인 해제'}</button></div></div>;}
+ return <section className="settings-section device-settings">
+ <div className="settings-row"><div><h2>같은 Wi-Fi에서 연결 허용</h2><p className="hint">승인한 브라우저에서 이 PC의 보관함을 사용합니다. PC와 LOXT가 실행 중이어야 합니다.</p></div><button className="secondary" role="switch" aria-checked={state?.enabled||false} disabled={!state||working} onClick={()=>act(()=>window.desktop.devices.configure(!state.enabled),'configure')}>{operation==='configure'?'연결 준비 중…':state?.enabled?'켜짐':'꺼짐'}</button></div>
+ {error||state?.error?<p role="alert" className="error-message">{error||state.error}</p>:null}{!state?<p role="status">설정을 불러오는 중…</p>:null}
+ {state?.pending.length?<section className="device-pending" aria-label="연결 승인 요청"><h3>승인 대기 · {state.pending.length}개</h3><p className="hint">직접 연결을 요청한 브라우저인지 확인한 뒤 승인하세요.</p>{state.pending.map(r=><div className="settings-row" key={r.id}><strong>{r.name} · 연결 요청</strong><div className="device-actions"><button className="secondary" disabled={working} onClick={()=>act(()=>window.desktop.devices.approve(r.id,false),'approve')}>거절</button><button className="primary" disabled={working} onClick={()=>act(()=>window.desktop.devices.approve(r.id,true),'approve')}>승인</button></div></div>)}</section>:null}
+ <div className="device-view-tabs"><button className="secondary" aria-pressed={view==='connect'} onClick={()=>setView('connect')}>처음 연결하기</button><button className="secondary" aria-pressed={view==='manage'} onClick={()=>setView('manage')}>승인한 브라우저{state?.devices.length?` · ${state.devices.length}`:''}</button></div>
+ {view==='connect'?<>
+ <section className="device-step"><h3>1. PC와 기기를 같은 Wi-Fi에 연결</h3><p className="hint">공유기가 기기 간 통신을 허용해야 합니다. Windows 방화벽에서 LOXT의 Private 네트워크 연결을 허용하세요.</p><p role="status">{state?.running?'연결 서버 실행 중':state?.enabled?'연결 서버 중지됨 · 연결을 다시 켜 주세요.':'위에서 연결 허용을 켜 주세요.'}</p></section>
+ {state?.running?<>
+ <section className="device-step"><h3>2. 기기에 인증서 설치·신뢰</h3><p className="hint">기기에서 초기 설정 주소를 열어 공개 인증서를 내려받고 아래 지문과 비교하세요. iPhone·iPad는 설정 → 일반 → VPN 및 기기 관리에서 설치한 뒤, 일반 → 정보 → 인증서 신뢰 설정에서 LOXT 인증서를 신뢰합니다. Windows 브라우저는 신뢰할 수 있는 루트 인증 기관에 설치합니다.</p>{addresses(state.bootstrap,'bootstrap','초기 설정 주소 복사')}<details><summary>인증서 지문·만료 확인</summary><p className="hint">인증서 지문: {state.fingerprint}</p><p className="hint">만료: {date(state.certificateExpires)}{state.certificateRenewed?' · 갱신된 인증서를 다시 설치·신뢰해 주세요.':''}</p><p className="hint">연결을 그만 사용할 때 기기에 설치한 LOXT 인증서를 제거할 수 있습니다.</p></details></section>
+ <section className="device-step"><h3>3. QR 또는 연결 주소 열기</h3><p className="hint">처음 연결하는 브라우저에서 열어 주세요. 이미 유효한 승인이 있는 브라우저는 기존 승인을 사용합니다.</p>{validQR?<><img width="180" height="180" src={state.qr} alt="LOXT 기기 연결 QR"/><p className="hint">만료까지 {Math.floor(remaining/60)}:{String(remaining%60).padStart(2,'0')} · PC 승인 필요</p></>:<p role="status">연결 QR이 만료되었습니다. 새 QR이나 연결 주소를 생성해 주세요.</p>}<div className="device-actions">{copyButton('pair',0,'연결 주소 복사')}<button className="secondary" disabled={working} onClick={()=>act(()=>window.desktop.devices.qr(),'qr')}>새 QR 생성</button></div></section>
+ <section className="device-step"><h3>4. 이 PC에서 연결 요청 승인</h3><p className="hint">기기에서 요청하면 이 화면 상단에 나타납니다. 모르는 요청은 거절하세요. 연결 후에는 같은 브라우저로 다시 열면 됩니다.</p></section>
+ </>:null}</>:<>
+ <h3>승인한 브라우저</h3><p className="hint">브라우저마다 별도로 승인합니다. 같은 이름이어도 다른 브라우저일 수 있습니다. ‘접속 중’은 실제 연결 상태이며 승인 유효 여부와 다릅니다.</p>
+ {!state?.devices.some(d=>!d.expired)?<p className="hint">유효한 승인이 없습니다. 처음 연결하기에서 기기를 연결하세요.</p>:state.devices.filter(d=>!d.expired).map(browser)}
+ {state?.devices.some(d=>d.expired)?<details><summary>만료된 승인 {state.devices.filter(d=>d.expired).length}개</summary>{state.devices.filter(d=>d.expired).map(browser)}</details>:null}
+ {state?.running?<><h3>승인한 브라우저에서 다시 열기</h3><p className="hint">쿠키를 지웠거나 승인이 만료·해제되었다면 처음 연결하기에서 새 주소를 사용하세요.</p>{addresses(state.addresses,'reconnect','재접속 주소 복사')}</>:null}
+ </>}
+ <details><summary>동기화 진단</summary><p className="hint">최근 100개 요청의 식별자·시간만 포함하며 문서 본문과 접속 토큰은 포함하지 않습니다.</p><div className="device-actions"><button className="secondary" disabled={working} onClick={()=>act(async()=>setDiagnostics(await window.desktop.devices.diagnostics()))}>새로 확인</button><button className="secondary" disabled={working} onClick={()=>act(()=>window.desktop.devices.copyDiagnostics())}>진단 복사</button></div>{diagnostics?.connections.map((d,i)=><p className="hint" key={i}>{d.name} · {d.ready?'접속 중':'연결 중'} · 왕복 {d.rttMs??'—'} ms · 대기 {d.pending}개</p>)}</details>
+ {confirm?<Modal title={confirm.expired?'만료 항목 정리':'브라우저 승인 해제'} onClose={()=>{if(!working)setConfirm(null);}}><p><strong>{confirm.name}</strong>의 {confirm.expired?'만료된 승인 항목을 목록에서 제거합니다.':'승인을 해제하면 이 브라우저의 PC 연결이 종료됩니다. 다시 연결하려면 새 주소로 PC 승인을 받아야 합니다.'}</p><p className="hint">PC에 저장된 문서는 삭제하지 않습니다. 저장 대기 중인 내용은 해당 브라우저에서 먼저 저장하거나 초안 사본을 받아 보관해 주세요.</p><div className="dialog-actions"><button className="secondary" disabled={working} onClick={()=>setConfirm(null)}>취소</button><button className="primary danger" disabled={working} onClick={async()=>{if(await act(()=>window.desktop.devices.revoke(confirm.id),'revoke'))setConfirm(null);}}>{confirm.expired?'목록에서 제거':'승인 해제'}</button></div></Modal>:null}
+ </section>;
 }

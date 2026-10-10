@@ -29,8 +29,9 @@
 @media(pointer:coarse){.memo-outline-title{height:auto}.memo-tools .menu-trigger,.memo-search button{min-width:44px}.memo-outline-disclosure{width:44px;flex-basis:44px}}
 @media(prefers-reduced-motion:reduce){.memo-outline{animation:none}}
 
-/* Nested guides inherit the parent block color, including expanded toggles. */
-.memo-editor .bn-block-group .bn-block-group{border-left:1px solid currentColor;padding-left:4px;margin-left:20px}
+/* Keep nested spacing without either the LOXT or editor-default guide. */
+.memo-editor .bn-block-group .bn-block-group{border-left:0;padding-left:5px;margin-left:20px}
+.memo-editor .bn-editor .bn-block-group .bn-block-group>.bn-block-outer::before{content:none}
 .memo-editor .bn-block-content[data-content-type="codeBlock"]>.memo-code-language{position:absolute;top:8px;left:10px;font-family:SUIT,sans-serif}
 .memo-editor .bn-block-content[data-content-type="codeBlock"]>pre{padding-top:44px}
 .memo-code-language-trigger{font:inherit;font-size:12px;color:inherit;opacity:.8;background:transparent;border:0;padding:5px 8px;border-radius:5px;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center}
@@ -43,15 +44,12 @@
 .memo-code-language-results p{font-size:13px;color:var(--theme-text-muted);margin:8px}
 @media(pointer:coarse){.memo-code-language-trigger,.memo-code-language-results button{min-height:44px}.memo-editor .bn-block-content[data-content-type="codeBlock"]>pre{padding-top:60px}}
 
-.memo-editor [data-memo-guide-color="gray"]>.bn-block>.bn-block-group{border-left-color:var(--bn-colors-highlights-gray-text,currentColor)}
-.memo-editor [data-memo-guide-color="brown"]>.bn-block>.bn-block-group{border-left-color:var(--bn-colors-highlights-brown-text,currentColor)}
-.memo-editor [data-memo-guide-color="red"]>.bn-block>.bn-block-group{border-left-color:var(--bn-colors-highlights-red-text,currentColor)}
-.memo-editor [data-memo-guide-color="orange"]>.bn-block>.bn-block-group{border-left-color:var(--bn-colors-highlights-orange-text,currentColor)}
-.memo-editor [data-memo-guide-color="yellow"]>.bn-block>.bn-block-group{border-left-color:var(--bn-colors-highlights-yellow-text,currentColor)}
-.memo-editor [data-memo-guide-color="green"]>.bn-block>.bn-block-group{border-left-color:var(--bn-colors-highlights-green-text,currentColor)}
-.memo-editor [data-memo-guide-color="blue"]>.bn-block>.bn-block-group{border-left-color:var(--bn-colors-highlights-blue-text,currentColor)}
-.memo-editor [data-memo-guide-color="purple"]>.bn-block>.bn-block-group{border-left-color:var(--bn-colors-highlights-purple-text,currentColor)}
-.memo-editor [data-memo-guide-color="pink"]>.bn-block>.bn-block-group{border-left-color:var(--bn-colors-highlights-pink-text,currentColor)}
 
 @media(pointer:coarse){.memo-toolbar .document-back{width:44px;min-width:44px}}
 @media(max-height:500px) and (pointer:coarse){.memo-toolbar{padding:3px 4px;gap:4px}.memo-toolbar .document-identity{flex:1 1 110px;min-width:0;gap:3px}.memo-toolbar .document-identity input{flex:1;width:90px}.memo-tools{flex-wrap:nowrap;gap:3px}.memo-tools .menu-trigger span,.memo-outline-toggle span{display:none}.memo-tools>button,.memo-tools .menu-trigger{padding:5px 7px}.memo-scroll .bn-editor{padding:16px 20px 40px}.memo-toolbar .memo-save-status{max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
+
+.memo-outline-title[data-level="1"]{font-size:16px;font-weight:650}.memo-outline-title[data-level="2"]{font-size:14px;font-weight:600}.memo-outline-title[data-level="3"]{font-size:13px;font-weight:550}.memo-outline-title[data-level="4"]{font-size:12px;font-weight:450}
+.memo-tools .memo-history{display:none}.memo-code-language{right:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}.memo-code-language-trigger{min-width:0;max-width:calc(100% - 84px);overflow:hidden;text-overflow:ellipsis}.memo-code-copy{font:inherit;font-size:12px;border:0;border-radius:5px;background:transparent;color:inherit;padding:5px 8px;white-space:nowrap;cursor:pointer}.memo-code-copy:hover{background:var(--theme-surface-hover)}.memo-code-copy:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+@media(pointer:coarse){.memo-tools .memo-history{display:inline-flex}.memo-code-copy{min-height:44px;min-width:72px}}
+
+.memo-view-tools{display:flex;align-items:center;gap:6px;flex:none}.memo-view-tools>.script-export{height:32px;min-height:32px;font-size:11px;padding:6px 9px}@media(pointer:coarse){.memo-view-tools>.script-export{height:44px;min-height:44px;min-width:44px}}

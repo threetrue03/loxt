@@ -202,6 +202,7 @@ handle('devices:copy', async payload => {
   throw new Error('주소를 복사하지 못했습니다. 잠시 후 다시 시도해 주세요.');
 });
 handle('devices:approve', payload => deviceServer.approve(payload.id,payload.allow));
+handle('devices:rename', ({id,name}) => deviceServer.rename(id,name));
 handle('devices:revoke', id => deviceServer.revoke(id));
 handle('preferences:get', () => preferences.snapshot());
 handle('preferences:migrate', legacy => preferences.migrate(legacy));

@@ -1,6 +1,6 @@
 !ifndef LOXT_INSTALLER_LANGUAGE
 !define LOXT_INSTALLER_LANGUAGE
-!define /ifndef VERSION "2.8.0"
+!define /ifndef VERSION "2.8.1"
 LangString LoxtInstaller000 1042 "LOXT 설치 완료"
 LangString LoxtInstaller000 1033 "LOXT installation complete"
 LangString LoxtInstaller001 1042 "프로그램 설치 완료"

@@ -3,12 +3,12 @@ import Icon from './Icon.jsx';
 import Menu from './Menu.jsx';
 import { parentOf } from './FolderTree.jsx';
 
-export default function HomePage({ mode, loaded, busy, notes, folders, parents, recent, jobs, recording, onRecord, onImport, onYouTube, onMemo, onFolder, onLibrary, onRoot, onJob, onModels, renderNote, renderFolder }) {
+export default function HomePage({ mode, loaded, busy, notes, folders, parents, recent, jobs, recording, onRecord, onImport, onYouTube, onMemo, onFolder, onLibrary, onRoot, onJob, onModels, onDevices, renderNote, renderFolder }) {
   const live = mode === 'live';
   const hasNotes = notes.some(note => !note.deleted);
   const roots = folders.filter(folder => parentOf(folder, parents) === '');
   return <section className="content home-page">
-    <header className="heading home-heading"><h1 className="page-title-icon"><Icon name="home"/>홈</h1><span className="home-mode">{live ? 'Live' : 'Work'}</span></header>
+    <header className="heading home-heading"><h1 className="page-title-icon"><Icon name="home"/>홈</h1><span className="home-mode">{live ? 'Live' : 'Work'}</span><button className="home-section-link home-device-link" onClick={()=>window.desktop.remote?window.dispatchEvent(new Event('loxt:open-connection')):onDevices?.()}>{window.desktop.remote?'PC 연결 관리':'내 기기 연결'}<Icon name="chevronRight"/></button></header>
     <div className="home-start-actions">
       {!live || !window.desktop.remote ? <button className="home-start-action" disabled={!loaded || busy} onClick={onRecord}><Icon name="mic"/><span><strong>{live ? 'Live 시작' : '새 녹음 시작'}</strong><small>{live ? '말하는 동안 스크립트를 기록하세요.' : '녹음을 마치면 스크립트로 변환합니다.'}</small></span><Icon name="chevronRight"/></button> : null}
       {!live || !window.desktop.remote ? <button className="home-start-action" disabled={!loaded || busy} onClick={onImport}><Icon name="upload"/><span><strong>파일 불러오기</strong><small>음성 파일을 변환하세요.</small></span><Icon name="chevronRight"/></button> : null}
