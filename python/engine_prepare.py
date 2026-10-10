@@ -1,5 +1,6 @@
 """Shared installer/app preparation; persistent private Python, no system changes."""
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -34,11 +35,11 @@ def save_json(filename, value):
 
 def hardware():
     try:
-        result = subprocess.run(['nvidia-smi', '--query-gpu=name,memory.total', '--format=csv,noheader,nounits'],
+        result = subprocess.run(['nvidia-smi', '--query-gpu=name,memory.total,driver_version', '--format=csv,noheader,nounits'],
                                 capture_output=True, text=True, timeout=15, creationflags=0x08000000)
-        name, memory = result.stdout.splitlines()[0].rsplit(',', 1)
+        name, memory, driver = result.stdout.splitlines()[0].rsplit(',', 2)
         if result.returncode == 0 and int(memory.strip()) > 0:
-            return {'name': name.strip(), 'memory': int(memory.strip())}
+            return {'name': name.strip(), 'memory': int(memory.strip()), 'driver': driver.strip()}
     except (OSError, ValueError, IndexError, subprocess.TimeoutExpired):
         pass
     return None
@@ -85,7 +86,37 @@ def run(python, args, notify, protocol=False):
     return events
 
 
-def prepare(root, runtime, names, requested_device, notify, models_verified=False, prepare_auxiliary=True, transient=False, model_source=None):
+def fingerprint(value):
+    return hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
+
+
+def model_fingerprint(path, environment):
+    """Cheap invalidation after verified install; deep repair still runs inference."""
+    files = []
+    for name in ['model.bin', 'config.json', 'tokenizer.json', 'verified-model.json']:
+        target = path / name
+        if target.is_symlink():
+            raise ValueError('연결된 모델 검사 위치는 사용할 수 없습니다.')
+        if not target.exists():
+            if name == 'verified-model.json':
+                continue
+            raise ValueError('모델 파일이 없습니다: ' + name)
+        stat = target.stat()
+        files.append([name, stat.st_size, stat.st_mtime_ns])
+    return fingerprint([str(path.resolve()), files, environment])
+
+
+def environment_healthy(python):
+    if not python.is_file():
+        return False
+    try:
+        probe = subprocess.run([str(python), '-c', 'import faster_whisper, ctranslate2, av; import importlib.metadata as m; assert m.version("faster-whisper")=="1.2.1"; assert m.version("ctranslate2")=="4.8.2"; assert m.version("av")=="16.1.0"'], capture_output=True, timeout=30, creationflags=0x08000000)
+        return probe.returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def prepare(root, runtime, names, requested_device, notify, models_verified=False, prepare_auxiliary=True, transient=False, model_source=None, deep_check=False):
     root, runtime = root.resolve(), runtime.resolve()
     root.mkdir(parents=True, exist_ok=True)
     notify('engine-start', message='다른 변환·설치 작업을 확인하는 중')
@@ -132,34 +163,60 @@ def prepare(root, runtime, names, requested_device, notify, models_verified=Fals
         if not (base / 'sorinote-runtime.json').exists():
             if not marker.is_file():
                 raise RuntimeError('포함된 Python 설치 정보를 확인하지 못했습니다.')
+            from downloads import ensure_space
+            ensure_space(root, sum(path.stat().st_size for path in runtime.rglob('*') if path.is_file()))
             shutil.copytree(runtime, base, dirs_exist_ok=True, ignore=shutil.ignore_patterns('sorinote-runtime.json', '__pycache__'))
             shutil.copyfile(marker, base / 'sorinote-runtime.json')
         python = root / 'venv/Scripts/python.exe'
-        run(base / 'python.exe', ['-m', 'venv', root / 'venv'], notify)
-        run(python, ['-m', 'pip', 'install', '--disable-pip-version-check', 'pip==26.2.1'], notify)
+        requirements = RESOURCES / ('requirements.txt' if device == 'cuda' else 'requirements-cpu.txt')
+        environment_signature = fingerprint({'version': 1, 'requirements': requirements.read_text('utf8'),
+                                             'runtime': marker.read_text('utf8'), 'device': device, 'gpu': gpu,
+                                             'worker': hashlib.sha256((RESOURCES / 'worker.py').read_bytes()).hexdigest()})
+        environment_file = root / 'environment-verified.json'
+        saved_environment = read_json(environment_file, {})
+        reused = not deep_check and isinstance(saved_environment, dict) and saved_environment.get('fingerprint') == environment_signature and environment_healthy(python)
+        if not reused:
+            from downloads import ensure_space
+            ensure_space(root, (3 if device == 'cuda' else 1) * 1024 ** 3)
+            run(base / 'python.exe', ['-m', 'venv', root / 'venv'], notify)
+            run(python, ['-m', 'pip', 'install', '--disable-pip-version-check', 'pip==26.2.1'], notify)
         wheels = []
-        if device == 'cuda':
+        if device == 'cuda' and not reused:
             notify('engine-start', message='GPU 실행 라이브러리 다운로드 중')
             events = run(python, [RESOURCES / 'downloads.py', '--root', root / 'wheels', '--parent-pid', os.getpid()], notify, True)
             wheels = next((data['files'] for kind, data in events if kind == 'wheels'), [])
             if len(wheels) != 3 or any(Path(name).name != name or not name.endswith('.whl') for name in wheels):
                 raise RuntimeError('GPU 설치 파일을 확인하지 못했습니다.')
-        notify('engine-start', message='변환 엔진과 실행 라이브러리 설치 중')
-        run(python, ['-m', 'pip', 'install', '--disable-pip-version-check', '--resume-retries', '10', '--timeout', '60',
-                     '--only-binary=:all:', *[root / 'wheels' / name for name in wheels], '-r',
-                     RESOURCES / ('requirements.txt' if device == 'cuda' else 'requirements-cpu.txt')], notify)
+        if not reused:
+            notify('engine-start', message='변환 엔진과 실행 라이브러리 설치 중')
+            run(python, ['-m', 'pip', 'install', '--disable-pip-version-check', '--resume-retries', '10', '--timeout', '60',
+                         '--only-binary=:all:', *[root / 'wheels' / name for name in wheels], '-r', requirements], notify)
+            save_json(environment_file, {'fingerprint': environment_signature})
+        else:
+            notify('engine-start', message='검증된 변환 환경 재사용 중', reused=True)
         if prepare_auxiliary:
             notify('engine-start', component='auxiliary', message='화자 분석·출력 장치 엔진 준비 중')
             run(base / 'python.exe', [RESOURCES / 'auxiliary_prepare.py', '--root', root / 'auxiliary', '--runtime', base, '--parent-pid', os.getpid()], notify, True)
         prepared = read_json(root / 'prepared.json', {})
+        if not isinstance(prepared, dict):
+            prepared = {}
         validations = prepared.get('validations', {})
         if not isinstance(validations, dict):
             validations = {}
+        fingerprints = prepared.get('fingerprints', {})
+        if not isinstance(fingerprints, dict):
+            fingerprints = {}
         if prepared.get('model') == 'medium' and prepared.get('checkedAt'):
             validations.setdefault('medium:cuda:int8_float16', prepared['checkedAt'])
         for index, name in enumerate(names, 1):
             notify('validation-start', model=name, device=device, index=index, total=len(names))
-            args = ['--model-dir', model_source if model_source and name == names[0] else root / 'models' / name, '--model', name, '--device', device, '--parent-pid', os.getpid()]
+            location = model_source if model_source and name == names[0] else root / 'models' / name
+            signature = model_fingerprint(location, environment_signature)
+            cached = next((compute for compute in PREFERENCES[device] if fingerprints.get(f'{name}:{device}:{compute}') == signature and f'{name}:{device}:{compute}' in validations), None)
+            if reused and cached and not deep_check:
+                notify('model-ready', model=name, device=device, compute_type=cached, index=index, total=len(names), reused=True)
+                continue
+            args = ['--model-dir', location, '--model', name, '--device', device, '--parent-pid', os.getpid()]
             events = run(python, [RESOURCES / 'worker.py', 'probe', *args], notify, True)
             supported = next((data['compute_types'] for kind, data in events if kind == 'probe'), [])
             compute = next((value for value in PREFERENCES[device] if value in supported), None)
@@ -169,7 +226,8 @@ def prepare(root, runtime, names, requested_device, notify, models_verified=Fals
             if not any(kind == 'prepared' for kind, _ in events):
                 raise RuntimeError('모델 실행을 확인하지 못했습니다.')
             validations[f'{name}:{device}:{compute}'] = datetime.now(timezone.utc).isoformat()
-            save_json(root / 'prepared.json', {'validations': validations})
+            fingerprints[f'{name}:{device}:{compute}'] = signature
+            save_json(root / 'prepared.json', {'validations': validations, 'fingerprints': fingerprints})
             notify('model-ready', model=name, device=device, compute_type=compute, index=index, total=len(names))
         # Existing model choice is retained; explicit device changes apply only on success.
         if not transient and (not existing or requested_device != 'auto'):
@@ -188,11 +246,12 @@ def main():
     parser.add_argument('--transient', action='store_true')
     parser.add_argument('--parent-pid', type=int, default=0)
     parser.add_argument('--model-source', type=Path)
+    parser.add_argument('--deep-check', action='store_true')
     args = parser.parse_args()
     watch_parent(args.parent_pid)
     from downloads import emit
     try:
-        prepare(args.root, args.runtime, list(dict.fromkeys(args.models.split(','))), args.device, emit, prepare_auxiliary=not args.skip_auxiliary, transient=args.transient, model_source=args.model_source)
+        prepare(args.root, args.runtime, list(dict.fromkeys(args.models.split(','))), args.device, emit, prepare_auxiliary=not args.skip_auxiliary, transient=args.transient, model_source=args.model_source, deep_check=args.deep_check)
     except Exception as error:
         emit('error', message=str(error))
         return 1

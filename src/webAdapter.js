@@ -1,13 +1,19 @@
 import {webTransport} from './webTransport.js';
 import { recordingJournal } from './webRecordingJournal.js';
+import {requestApproval} from './webApproval.js';
 export async function connectWeb(session){
  const journal=recordingJournal(session.hostId),activeRecordings=new Set();
  const listeners=new Map(),off=()=>()=>{},unsupported=()=>Promise.reject(new Error('이 기능은 PC 앱에서 사용해 주세요.'));
  const subscribe=(event,fn)=>{if(!listeners.has(event))listeners.set(event,new Set());listeners.get(event).add(fn);return()=>listeners.get(event).delete(fn);};
+ let resync=()=>{};
  const transport=webTransport(session,(type,value)=>{if(type==='resync')resync();else listeners.get(type)?.forEach(fn=>fn(value));});
- function resync(){rpc('liveState').then(value=>listeners.get('live')?.forEach(fn=>fn(value))).catch(()=>{document.documentElement.dataset.connection='offline';});listeners.get('library')?.forEach(fn=>{fn({workspace:'work',resync:true});fn({workspace:'live',resync:true});});}
- window.addEventListener('pageshow',event=>{if(event.persisted)resync();});
- document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')resync();});
+ let onPageShow,onVisibility;
+ try{
+ await transport.waitReady();
+ resync=()=>{rpc('liveState').then(value=>listeners.get('live')?.forEach(fn=>fn(value))).catch(()=>{void transport.reconnect().catch(()=>{});});listeners.get('library')?.forEach(fn=>{fn({workspace:'work',resync:true});fn({workspace:'live',resync:true});});};
+ onPageShow=event=>{if(event.persisted)resync();};onVisibility=()=>{if(document.visibilityState==='visible')resync();};
+ window.addEventListener('pageshow',onPageShow);
+ document.addEventListener('visibilitychange',onVisibility);
  async function rpc(method,payload={}) {
   const requestId=crypto.randomUUID(),bytes=payload.bytes;
   const metadata={method,payload:bytes?{...payload,bytes:undefined}:payload,requestId};
@@ -45,7 +51,7 @@ export async function connectWeb(session){
   browser:{command:unsupported,onShortcut:off,onState:off,onCloseTab:off,onNewTab:off},
   live,detachAudio:p=>rpc('audio.detach',p),manageLibrary:p=>rpc('manage',p),searchLibrary:p=>rpc('search',p),onLibraryChange:fn=>subscribe('library',fn),getTranscriptionEnvironment:()=>rpc('environment'),onTranscriptionState:fn=>subscribe('transcription',fn),startTranscription:(id,options={})=>rpc('convert',{id,workspace:'work',...options}),cancelTranscription:id=>rpc('cancel',{id}),retrySpeakers:unsupported,
   exportFolder:p=>rpc('folder.export',p).then(download),exportTranscript:p=>rpc('script.export',p).then(download),
-  syncDiagnostics:()=>transport.diagnostics(),onConnection:fn=>subscribe('connection',fn),
+  syncDiagnostics:()=>transport.diagnostics(),onConnection:fn=>subscribe('connection',fn),connection:{check:()=>transport.reconnect(),approve:async(address,options)=>transport.reconnect(await requestApproval(address,options)),restoreDraft:p=>rpc('draft.restore',p)},
   memos:{changes:p=>rpc('memo.changes',p),create:(folder,workspace='work')=>rpc('memo.create',{folder,workspace}),get:id=>rpc('memo.get',{id}),save:p=>rpc('memo.save',p),attach:p=>rpc('memo.attach',p),export:p=>rpc('memo.export',p).then(download),copy:text=>navigator.clipboard.writeText(text),openLink:async value=>{const url=typeof value==='string'?value:value.url;if(url.startsWith('loxt-asset:')){const [id,name]=new URL(url).pathname.slice(1).split('/');const mode=await modeFor(id);download({download:`/file/memo/${mode}/${id}/${name}`});}else if(/^(https?:|mailto:)/.test(url))window.open(url,'_blank','noopener');},pending:()=>{},onFlush:off},
   pdf:{changes:p=>rpc('pdf.changes',p),previewInk:p=>Promise.resolve(transport.preview(p)),onPreview:fn=>subscribe('pdf-preview',fn),create:p=>rpc('pdf.create',p),info:p=>rpc('pdf.info',p),page:p=>rpc('pdf.page',p),preview:p=>rpc('pdf.preview',p),cancelPreview:p=>rpc('pdf.cancelPreview',p),outline:p=>rpc('pdf.outline',p),destination:p=>rpc('pdf.destination',p),prepareIndex:p=>rpc('pdf.prepareIndex',p),source:p=>`/file/pdf/${p.workspace}/${p.id}`,searchIndex:p=>rpc('pdf.searchIndex',p),index:p=>rpc('pdf.index',p),get:p=>rpc('pdf.get',p),save:p=>rpc('pdf.save',p),bytes:async p=>new Uint8Array(await (await fetch(`/file/pdf/${p.workspace}/${p.id}`)).arrayBuffer()),export:p=>rpc('pdf.export',p).then(download),import:async p=>{if(p.bytes)return rpc('pdf.import',p);const file=await choose('.pdf');if(!file)return {canceled:true};if(file.size>128*1024*1024)throw Error('128 MB 이하의 PDF를 선택해 주세요.');return rpc('pdf.import',{...p,name:file.name,bytes:new Uint8Array(await file.arrayBuffer())});}},
   recordingDrafts:{list:async()=>(await journal.list()).filter(d=>!activeRecordings.has(d.id)),remove:id=>journal.remove(id),recover:async draft=>{const file=new Blob(draft.chunks,{type:draft.mime}),ext=draft.mime==='audio/mp4'?'.m4a':draft.mime==='audio/ogg'?'.ogg':'.webm';await rpc('record.recover',{workspace:'work',previousId:draft.id,name:(draft.title||'녹음')+' 복구 사본'+ext,seconds:draft.seconds,bytes:new Uint8Array(await file.arrayBuffer())});}},
@@ -60,4 +66,10 @@ export async function connectWeb(session){
  const modes=new Map();async function modeFor(id){if(modes.has(id))return modes.get(id);for(const mode of ['work','live']){const library=await rpc('library.list',{workspace:mode});for(const n of library.notes)modes.set(n.id,mode);}return modes.get(id)||'work';}
  window.desktop=adapter;
  return adapter;
+ }catch(error){
+  transport.dispose();
+  if(onPageShow)window.removeEventListener('pageshow',onPageShow);
+  if(onVisibility)document.removeEventListener('visibilitychange',onVisibility);
+  throw error;
+ }
 }

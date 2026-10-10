@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from 'react';
 import Icon from './Icon.jsx';
 import Menu from './Menu.jsx';
 import ConversionDialog from './ConversionDialog.jsx';
+import Modal from './Modal.jsx';
+import {cleanError} from './SettingsProvider.jsx';
 import MemoHost from './MemoHost.jsx';
 import ResizableDocuments from './ResizableDocuments.jsx';
 import { saveMemo } from './memoStore.js';
@@ -33,6 +35,7 @@ export default function RecordingPage({ workspaceActive = true, folderParents, f
   const [stored, setStored] = useState(null);
   const documentRoot=useRef(null); const [fullscreen,toggleFullscreen]=useDocumentFullscreen(documentRoot);
   const [review, setReview] = useState(false);
+  const [discardReview,setDiscardReview]=useState(false);
   const [conversionReady, setConversionReady] = useState(false);
   const [memoId, setMemoId] = useState(null), [memoOpen, setMemoOpen] = useState(false);
   useEffect(() => { if (!workspaceActive) setReview(false); }, [workspaceActive]);
@@ -258,12 +261,13 @@ export default function RecordingPage({ workspaceActive = true, folderParents, f
       <span className="record-device" title={device === '__system__' ? outputStatus || '컴퓨터 소리' : device ? devices.find(item => item.deviceId === device) ? devices.find(item => item.deviceId === device).label || '선택한 마이크' : '선택 장치 · 연결되지 않음' : '시스템 기본 마이크'}>{device === '__system__' ? outputStatus || '컴퓨터 소리' : device ? devices.find(item => item.deviceId === device) ? devices.find(item => item.deviceId === device).label || '선택한 마이크' : '선택 장치 · 연결되지 않음' : '시스템 기본 마이크'}</span><div className="clock">{formatRecordingTime(seconds)}</div>
       <div className="record-actions">
         {state === 'save-error' ? <><button className="secondary" onClick={keepPartial}>저장된 부분 보관</button><button className="primary" onClick={save}>저장 재시도</button></> : <>
-          {state === 'stopped' ? <button className="secondary danger" onClick={() => discard().catch(error => setError(error.message))}>버리기</button> : <button className="secondary" disabled={!['recording', 'paused'].includes(state)} onClick={pause}><Icon name={state === 'paused' ? 'play' : 'pause'}/><span>{state === 'paused' ? '녹음 계속' : '일시정지'}</span></button>}
+          {state === 'stopped' ? <button className="secondary danger" onClick={() => setDiscardReview(true)}>버리기</button> : <button className="secondary" disabled={!['recording', 'paused'].includes(state)} onClick={pause}><Icon name={state === 'paused' ? 'play' : 'pause'}/><span>{state === 'paused' ? '녹음 계속' : '일시정지'}</span></button>}
           <div className={`record-start-group ${state === 'stopped' ? 'conversion-button-group' : ''}`}><button className="primary" disabled={['starting', 'saving', 'discarding'].includes(state) || !window.desktop} onClick={state === 'ready' ? start : stopForReview}>{state === 'ready' ? <><Icon name="mic"/>녹음 시작</> : state === 'saving' ? '저장 중…' : state === 'starting' ? '연결 중…' : state === 'stopped' || conversionReady ? '변환하기' : <><Icon name="stop"/>녹음 중단</>}</button>{state !== 'stopped' && <Menu label="녹음 장치 선택" trigger={<Icon name="chevronDown"/>} className="microphone-menu" upward disabled={active || Boolean(stored)}>{close => [{ deviceId: '', label: '시스템 기본 마이크' }, ...(!window.desktop.remote ? [{ deviceId: '__system__', label: '컴퓨터 소리' }] : []), ...devices].map((item, index) => <button role="menuitemradio" aria-checked={device === item.deviceId} key={item.deviceId} onClick={() => { setDevice(item.deviceId); close(); }}><Icon name={item.deviceId === '__system__' ? 'speaker' : 'mic'}/><span>{item.label || `마이크 ${index}`}</span>{device === item.deviceId ? <span>✓</span> : null}</button>)}</Menu>}</div>
         </>}
       </div>
     </div>
     </div>
     {review ? <ConversionDialog folders={folders} parents={folderParents} initialFolder={folder} environment={environment} onClose={() => setReview(false)} onConfirm={convert}/> : null}
+    {discardReview ? <Modal title="녹음을 휴지통으로 이동할까요?" onClose={()=>{if(state!=='discarding')setDiscardReview(false);}}><p className="hint">녹음 원본과 이 녹음에 작성한 메모가 함께 휴지통으로 이동합니다. 휴지통에서 복구할 수 있으며, 영구 삭제하기 전까지 저장 공간을 사용합니다.</p><div className="conversion-actions"><button className="secondary" disabled={state==='discarding'} onClick={()=>setDiscardReview(false)}>취소</button><button className="primary danger" disabled={state==='discarding'} onClick={()=>discard().catch(error=>setError(cleanError(error)))}>{state==='discarding'?'처리 중…':'휴지통으로 이동'}</button></div>{error?<p className="error-message" role="alert">{error}</p>:null}</Modal>:null}
   </section></DocumentFullscreenContext.Provider>;
 }

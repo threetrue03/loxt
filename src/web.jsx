@@ -2,6 +2,7 @@ import {preventPageZoom} from '../shared/web-gestures.js';
 preventPageZoom();
 import { connectWeb } from './webAdapter.js';
 import { connectionURL } from '../shared/connection-url.js';
+import {downloadDrafts,collectDrafts,recordingDrafts,downloadRecording} from '../public/recovery-drafts.js';
 import './styles.css';
 import './v2.css';
 import './web.css';
@@ -21,18 +22,18 @@ async function launch() {
   try { state = await session(); } catch { unavailable = true; }
   if (current !== generation) return;
   if (state) {
-    history.replaceState(null, '', location.pathname);
-    await connectWeb(state); await import('./main.jsx'); connected = true; return;
+    try{await connectWeb(state);await import('./main.jsx');history.replaceState(null,'',location.pathname);connected=true;navigator.serviceWorker?.register('/loxt-sw.js').catch(()=>{});return;}catch{unavailable=true;}
   }
   const token = new URLSearchParams(location.hash.slice(1)).get('pair');
   root.innerHTML = `<main class="web-connect"><img src="/brand/LOXT-lockup-white.svg" alt="LOXT" width="150"><h1>내 PC에 연결</h1><p role="status"></p>
     <form class="web-connect-form"><label for="connection-address">연결 주소 다시 입력</label><input id="connection-address" type="text" inputmode="url" autocomplete="off" spellcheck="false" placeholder="PC에서 복사한 연결 주소" aria-describedby="connection-help"><p id="connection-help" class="hint">PC의 처음 연결하기 → 연결 주소 복사로 받은 주소를 붙여넣으세요. 인증서 신뢰와 PC 승인이 필요합니다.</p><p id="connection-error" class="error-message" role="alert" hidden></p><button type="submit" class="primary">이 주소로 연결</button></form>
-    <button type="button" class="secondary web-connect-retry">다시 확인</button></main>`;
+    <button type="button" class="secondary web-connect-retry">다시 확인</button><div class="web-connect-drafts"><button class="secondary web-drafts-download">메모·필기 초안 사본 받기</button><p class="hint web-drafts-count"></p><div class="web-drafts-recordings"></div><label class="web-drafts-confirm"><input type="checkbox"> 새 주소를 열기 전에 필요한 초안과 녹음 사본을 보관했습니다</label></div></main>`;
   const status = root.querySelector('[role=status]'), input = root.querySelector('input'), error = root.querySelector('[role=alert]');
   root.querySelector('form').onsubmit = event => {
     event.preventDefault();
     try {
       const { first } = connectionURL(input.value, { requirePair: true });
+      if(new URL(first).origin!==location.origin&&!root.querySelector('.web-drafts-confirm input').checked)throw Error('새 주소로 이동하기 전에 아래 초안과 녹음 사본을 먼저 보관해 주세요.');
       error.hidden = true; input.removeAttribute('aria-invalid');
       cancelAttempt();
       if (first === location.href) launch().catch(showFailure);
@@ -44,6 +45,9 @@ async function launch() {
   };
   input.oninput = () => { error.hidden = true; input.removeAttribute('aria-invalid'); input.setAttribute('aria-describedby', 'connection-help'); };
   root.querySelector('.web-connect-retry').onclick = () => launch().catch(showFailure);
+  root.querySelector('.web-drafts-download').onclick=()=>downloadDrafts();
+  root.querySelector('.web-drafts-count').textContent=`이 브라우저의 메모·필기 초안 ${collectDrafts().documents.length}개. 연결 후 연결 관리에서 사본을 가져올 수 있습니다.`;
+  recordingDrafts().then(records=>{if(current!==generation)return;for(const record of records){const row=document.createElement('div'),label=document.createElement('span'),button=document.createElement('button');label.textContent=record.title||'녹음 초안';button.className='secondary';button.textContent='녹음 원본 받기';button.onclick=()=>downloadRecording(record.key).catch(e=>{error.hidden=false;error.textContent=e.message;});row.append(label,button);root.querySelector('.web-drafts-recordings').append(row);}}).catch(()=>{});
   if (!token) {
     status.textContent = unavailable ? 'PC에 연결하지 못했습니다. 연결 서버와 Wi-Fi를 확인하거나 새 연결 주소를 입력하세요.' : '아직 이 브라우저가 승인되지 않았습니다. 새 연결 주소를 입력해 연결을 요청하세요.';
     return;
@@ -73,5 +77,5 @@ function showFailure(error) {
   else root.textContent = '연결을 시작하지 못했습니다. ' + error.message;
 }
 window.addEventListener('pagehide', cancelAttempt);
-window.addEventListener('hashchange', () => { if (!connected) launch().catch(showFailure); });
+window.addEventListener('hashchange', () => { if (!connected) launch().catch(showFailure);else window.dispatchEvent(new CustomEvent('loxt:connection-address',{detail:location.href})); });
 launch().catch(showFailure);

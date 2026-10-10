@@ -1,3 +1,4 @@
+!include "${__FILEDIR__}\installer-language.nsh"
 !ifndef SORINOTE_REMOVE_ENVIRONMENT
 !define SORINOTE_REMOVE_ENVIRONMENT
 !include LogicLib.nsh
@@ -9,7 +10,7 @@
   GetFullPathName $1 "$0\transcription"
   ${If} $0 == ""
   ${OrIf} $1 != "$0\transcription"
-    MessageBox MB_OK|MB_ICONSTOP "변환 환경의 삭제 경로를 확인하지 못했습니다." /SD IDOK
+    MessageBox MB_OK|MB_ICONSTOP "$(LoxtInstaller102)" /SD IDOK
     SetErrorLevel 2
     Quit
   ${EndIf}
@@ -17,7 +18,7 @@
     ClearErrors
     RMDir /r "$1"
     ${If} ${Errors}
-      MessageBox MB_OK|MB_ICONEXCLAMATION "모델 또는 변환 환경이 사용 중이어서 모두 삭제하지 못했습니다. LOXT를 종료한 뒤 다시 삭제해 주세요." /SD IDOK
+      MessageBox MB_OK|MB_ICONEXCLAMATION "$(LoxtInstaller103)" /SD IDOK
       SetErrorLevel 2
       Quit
     ${EndIf}

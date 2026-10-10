@@ -10,6 +10,7 @@
 !include LogicLib.nsh
 !include FileFunc.nsh
 !include "${__FILEDIR__}\gpu-detection.nsh"
+!define MUI_CUSTOMFUNCTION_ABORT SorinoteInstallerAbort
 
 Var SorinoteModels
 Var SorinoteModelRoot
@@ -37,21 +38,30 @@ Var SorinoteResultFile
 Var SorinoteCommand
 Var SorinotePreparationDone
 Var SorinotePollCount
+Var SorinoteRetryButton
+Var SorinoteLaterButton
+Var SorinoteLogButton
+Var SorinoteDetailsButton
+Var SorinoteStopButton
+Var SorinoteLanguage
+Var SorinoteSpaceLabel
+Var SorinotePreparationRunning
 !include "${__FILEDIR__}\maintenance.nsh"
 
 !macro customInit
-  StrCpy $SorinoteFinishTitle "LOXT 설치 완료"
+  StrCpy $SorinoteFinishTitle "$(LoxtInstaller000)"
   StrCpy $SorinoteModels ""
   StrCpy $SorinoteInstallPage 0
+  StrCpy $SorinotePreparationRunning 0
   StrCpy $SorinoteToolsRoot ""
   StrCpy $SorinoteModelResult 0
-  StrCpy $SorinoteFirstStage "프로그램 설치 완료"
+  StrCpy $SorinoteFirstStage "$(LoxtInstaller001)"
   StrCpy $SorinotePrepareState ${BST_CHECKED}
   StrCpy $SorinotePrepareDevice "auto"
-  StrCpy $SorinoteHardwareLabel "NVIDIA GPU 미감지 · 자동 선택 시 CPU 사용"
+  StrCpy $SorinoteHardwareLabel "$(LoxtInstaller002)"
   !insertmacro SorinoteQueryGpu "--query-gpu=name,memory.total --format=csv,noheader"
   ${If} $0 == 0
-    StrCpy $SorinoteHardwareLabel "감지된 GPU: $1"
+    StrCpy $SorinoteHardwareLabel "$(LoxtInstaller003)"
   ${EndIf}
   ${GetParameters} $0
   ClearErrors
@@ -65,7 +75,7 @@ Var SorinotePollCount
   ${OrIf} $1 == "cuda"
     StrCpy $SorinotePrepareDevice $1
   ${EndIf}
-  StrCpy $SorinoteFinishText "LOXT 설치가 완료되었습니다.$\r$\n$\r$\n원하는 항목을 체크한 뒤 마침을 눌러 주세요."
+  StrCpy $SorinoteFinishText "$(LoxtInstaller004)"
   StrCpy $SorinoteModelRoot "$APPDATA\sorinote-desktop\transcription\models"
   StrCpy $SorinoteOptimizedState ${BST_UNCHECKED}
   StrCpy $SorinoteStandardState ${BST_UNCHECKED}
@@ -114,21 +124,26 @@ Var SorinotePollCount
 !macroend
 
 !macro customFinishPage
+  !define MUI_PAGE_CUSTOMFUNCTION_PRE SorinotePublisherFinish
   !define MUI_FINISHPAGE_TITLE "$SorinoteFinishTitle"
   !define MUI_FINISHPAGE_TEXT "$SorinoteFinishText"
   !define MUI_FINISHPAGE_RUN
-  !define MUI_FINISHPAGE_RUN_TEXT "LOXT 실행하기"
+  !define MUI_FINISHPAGE_RUN_TEXT "$(LoxtInstaller005)"
   !define MUI_FINISHPAGE_RUN_FUNCTION SorinoteRunApp
   !define MUI_FINISHPAGE_SHOWREADME
-  !define MUI_FINISHPAGE_SHOWREADME_TEXT "바탕화면 바로가기 만들기"
+  !define MUI_FINISHPAGE_SHOWREADME_TEXT "$(LoxtInstaller006)"
   !define MUI_FINISHPAGE_SHOWREADME_FUNCTION SorinoteCreateDesktopLink
   !insertmacro MUI_PAGE_FINISH
+
+Function SorinotePublisherFinish
+  StrCpy $SorinoteFinishText "$SorinoteFinishText$\r$\n$\r$\n$(LoxtPublisher)"
+FunctionEnd
 
 Function SorinoteRunApp
   ClearErrors
   ExecShell "open" "$INSTDIR\LOXT.exe"
   ${If} ${Errors}
-    MessageBox MB_OK|MB_ICONEXCLAMATION "LOXT를 실행하지 못했습니다. 시작 메뉴에서 LOXT를 실행해 주세요."
+    MessageBox MB_OK|MB_ICONEXCLAMATION "$(LoxtInstaller007)"
   ${EndIf}
 FunctionEnd
 
@@ -136,7 +151,7 @@ Function SorinoteCreateDesktopLink
   ClearErrors
   CreateShortCut "$newDesktopLink" "$INSTDIR\LOXT.exe" "" "$INSTDIR\LOXT.exe" 0
   ${If} ${Errors}
-    MessageBox MB_OK|MB_ICONEXCLAMATION "바탕화면 바로가기를 만들지 못했습니다. 시작 메뉴에서 LOXT를 실행할 수 있습니다."
+    MessageBox MB_OK|MB_ICONEXCLAMATION "$(LoxtInstaller008)"
   ${EndIf}
   System::Call 'Shell32::SHChangeNotify(i 0x8000000, i 0, p 0, p 0)'
 FunctionEnd
@@ -162,22 +177,22 @@ Function SorinotePreparationPage
   ${OrIf} $SorinoteAction == "delete"
     Abort
   ${EndIf}
-  !insertmacro MUI_HEADER_TEXT "변환 환경 준비" "모델 설치부터 실제 실행 검사까지 진행합니다."
+  !insertmacro MUI_HEADER_TEXT "$(LoxtInstaller009)" "$(LoxtInstaller010)"
   nsDialogs::Create 1018
   Pop $0
-  ${NSD_CreateCheckbox} 0 0 100% 16u "설치한 모델의 변환 환경까지 준비하기 (권장)"
+  ${NSD_CreateCheckbox} 0 0 100% 16u "$(LoxtInstaller011)"
   Pop $SorinotePrepareChoice
   ${NSD_SetState} $SorinotePrepareChoice $SorinotePrepareState
   ${NSD_CreateLabel} 0 22u 100% 16u "$SorinoteHardwareLabel"
   Pop $0
-  ${NSD_CreateLabel} 0 42u 100% 28u "변환 엔진·실행 라이브러리를 설치하고, 선택한 모델을 실행 검사합니다.$\r$\n처음 준비할 때는 추가 다운로드와 저장 공간이 필요합니다."
+  ${NSD_CreateLabel} 0 42u 100% 28u "$(LoxtInstaller012)"
   Pop $0
-  ${NSD_CreateLabel} 0 72u 100% 12u "변환 실행 장치"
+  ${NSD_CreateLabel} 0 72u 100% 12u "$(LoxtInstaller013)"
   Pop $0
   ${NSD_CreateDropList} 0 86u 100% 80u ""
   Pop $SorinoteDeviceChoice
-  ${NSD_CB_AddString} $SorinoteDeviceChoice "자동 · 기존 장치 설정 우선, 처음 설치는 PC에 맞춰 선택"
-  ${NSD_CB_AddString} $SorinoteDeviceChoice "NVIDIA GPU · 호환 GPU와 드라이버 필요"
+  ${NSD_CB_AddString} $SorinoteDeviceChoice "$(LoxtInstaller014)"
+  ${NSD_CB_AddString} $SorinoteDeviceChoice "$(LoxtInstaller015)"
   ${NSD_CB_AddString} $SorinoteDeviceChoice "CPU"
   SendMessage $SorinoteDeviceChoice ${CB_SETCURSEL} 0 0
   ${If} $SorinotePrepareDevice == "cuda"
@@ -185,7 +200,7 @@ Function SorinotePreparationPage
   ${ElseIf} $SorinotePrepareDevice == "cpu"
     SendMessage $SorinoteDeviceChoice ${CB_SETCURSEL} 2 0
   ${EndIf}
-  ${NSD_CreateLabel} 0 104u 100% 34u "기존 모델 선택은 유지됩니다. 장치 변경은 준비 성공 후 적용합니다.$\r$\n실패하면 앱에서 다시 준비할 수 있습니다.$\r$\n체크를 해제하면 모델 파일만 설치합니다."
+  ${NSD_CreateLabel} 0 104u 100% 34u "$(LoxtInstaller016)"
   Pop $0
   nsDialogs::Show
 FunctionEnd
@@ -205,50 +220,95 @@ Function SorinoteModelsPage
   ${If} $SorinoteAction == "delete"
     Abort
   ${EndIf}
-  !insertmacro MUI_HEADER_TEXT "변환 모델 선택" "설치할 모델을 선택하세요. 여러 개를 설치할 수 있습니다."
+  !insertmacro MUI_HEADER_TEXT "$(LoxtInstaller017)" "$(LoxtInstaller018)"
   nsDialogs::Create 1018
   Pop $SorinoteModelsDialog
   ${If} $SorinoteModelsDialog == error
     Abort
   ${EndIf}
-  ${NSD_CreateLabel} 0 0 100% 25u "체크한 모델만 인터넷으로 다운로드합니다. PC에 맞는 기본 후보를 체크했습니다. 모두 해제하면 앱에서 나중에 설치할 수 있습니다."
+  ${NSD_CreateLabel} 0 0 100% 25u "$(LoxtInstaller019)"
   Pop $0
-  ${NSD_CreateCheckbox} 0 28u 100% 14u "저성능 (small) · 약 486 MB · 가볍게 사용"
+  ${NSD_CreateCheckbox} 0 28u 100% 14u "$(LoxtInstaller020)"
   Pop $SorinoteOptimized
   ${NSD_SetState} $SorinoteOptimized $SorinoteOptimizedState
+  ${NSD_OnClick} $SorinoteOptimized SorinoteUpdateSpace
   Push "small"
   Call SorinoteModelStatus
   Pop $1
   ${NSD_CreateLabel} 12u 42u 95% 12u "$1"
   Pop $0
-  ${NSD_CreateCheckbox} 0 56u 100% 14u "표준 (large-v3-turbo) · 약 1.62 GB · 속도와 정확도 균형"
+  ${NSD_CreateCheckbox} 0 56u 100% 14u "$(LoxtInstaller021)"
   Pop $SorinoteStandard
   ${NSD_SetState} $SorinoteStandard $SorinoteStandardState
+  ${NSD_OnClick} $SorinoteStandard SorinoteUpdateSpace
   Push "large-v3-turbo"
   Call SorinoteModelStatus
   Pop $1
   ${NSD_CreateLabel} 12u 70u 95% 12u "$1"
   Pop $0
-  ${NSD_CreateCheckbox} 0 84u 100% 14u "고성능 (large-v3) · 약 3.09 GB · 정확도 우선"
+  ${NSD_CreateCheckbox} 0 84u 100% 14u "$(LoxtInstaller022)"
   Pop $SorinotePerformance
   ${NSD_SetState} $SorinotePerformance $SorinotePerformanceState
+  ${NSD_OnClick} $SorinotePerformance SorinoteUpdateSpace
   Push "large-v3"
   Call SorinoteModelStatus
   Pop $1
   ${NSD_CreateLabel} 12u 98u 95% 12u "$1"
   Pop $0
-  ${NSD_CreateLabel} 0 112u 100% 24u "설치된 모델은 검증 후 재사용하고, 중단된 다운로드는 이어받습니다.$\r$\n모델은 앱 설정에서 선택하세요. 기존 녹음·스크립트는 유지됩니다."
+  ${NSD_CreateLabel} 0 112u 100% 24u ""
+  Pop $SorinoteSpaceLabel
+  Call SorinoteUpdateSpaceText
+  ${NSD_CreateLink} 0 136u 100% 10u "$(LoxtModelLocation)"
   Pop $0
+  ${NSD_OnClick} $0 SorinoteModelLocation
   nsDialogs::Show
+FunctionEnd
+
+Function SorinoteModelLocation
+  Pop $0
+  StrCpy $0 $SorinoteModelRoot
+  MessageBox MB_OK "$(LoxtModelLocationDetail)"
+FunctionEnd
+
+Function SorinoteUpdateSpace
+  Pop $0
+  Call SorinoteUpdateSpaceText
+FunctionEnd
+
+Function SorinoteUpdateSpaceText
+  StrCpy $1 0
+  ${NSD_GetState} $SorinoteOptimized $0
+  ${If} $0 == ${BST_CHECKED}
+    IntOp $1 $1 + 486
+  ${EndIf}
+  ${NSD_GetState} $SorinoteStandard $0
+  ${If} $0 == ${BST_CHECKED}
+    IntOp $1 $1 + 1620
+  ${EndIf}
+  ${NSD_GetState} $SorinotePerformance $0
+  ${If} $0 == ${BST_CHECKED}
+    IntOp $1 $1 + 3090
+  ${EndIf}
+  System::Call 'kernel32::GetDiskFreeSpaceExW(w "$APPDATA", *l.r2, p 0, p 0) i.r0'
+  ${If} $0 != 0
+    System::Int64Op $2 / 1000000
+    Pop $2
+  ${Else}
+    StrCpy $2 "?"
+  ${EndIf}
+  StrCpy $3 "$(LoxtInstaller023)"
+  ${NSD_SetText} $SorinoteSpaceLabel $3
 FunctionEnd
 
 Function SorinoteModelStatus
   Pop $0
-  StrCpy $1 "미설치"
+  StrCpy $1 "$(LoxtInstaller024)"
   ${If} ${FileExists} "$SorinoteModelRoot\$0\model.bin.part"
-    StrCpy $1 "이어받기 가능 · 다운로드 중단됨"
+    StrCpy $1 "$(LoxtInstaller025)"
+  ${ElseIf} ${FileExists} "$SorinoteModelRoot\.installer-stage-$0\model.bin.part"
+    StrCpy $1 "$(LoxtInstaller025)"
   ${ElseIf} ${FileExists} "$SorinoteModelRoot\$0\model.bin"
-    StrCpy $1 "이어받기 가능 · 설치 파일 확인 필요"
+    StrCpy $1 "$(LoxtInstaller026)"
     ${If} ${FileExists} "$SorinoteModelRoot\$0\config.json"
     ${AndIf} ${FileExists} "$SorinoteModelRoot\$0\tokenizer.json"
       ClearErrors
@@ -257,7 +317,7 @@ Function SorinoteModelStatus
         FileSeek $2 0 END $3
         FileClose $2
         ${If} $3 != 0
-          StrCpy $1 "설치됨 · 체크하면 무결성 확인 후 재사용"
+          StrCpy $1 "$(LoxtInstaller027)"
         ${EndIf}
       ${EndIf}
     ${EndIf}
@@ -310,52 +370,52 @@ Function SorinoteInstallShow
   GetDlgItem $0 $SorinoteInstallPage 1027
   ShowWindow $0 ${SW_HIDE}
   ${If} $SorinoteAction == "delete"
-    !insertmacro MUI_HEADER_TEXT "LOXT 삭제" "앱과 모델, 변환 환경을 삭제합니다. 녹음과 스크립트는 보존합니다."
-    !insertmacro SorinoteProgressControl "STATIC" "앱과 모델 삭제" 0 12 1805
-    !insertmacro SorinoteProgressControl "STATIC" "LOXT 삭제 준비 중" 37 14 1800
-    !insertmacro SorinoteProgressControl "STATIC" "앱·모델·변환 환경 삭제$\r$\n녹음·스크립트 보존" 54 38 1801
+    !insertmacro MUI_HEADER_TEXT "$(LoxtInstaller028)" "$(LoxtInstaller029)"
+    !insertmacro SorinoteProgressControl "STATIC" "$(LoxtInstaller030)" 0 12 1805
+    !insertmacro SorinoteProgressControl "STATIC" "$(LoxtInstaller031)" 37 14 1800
+    !insertmacro SorinoteProgressControl "STATIC" "$(LoxtInstaller032)" 54 38 1801
     Return
   ${ElseIf} $SorinoteAction == "update"
-    !insertmacro MUI_HEADER_TEXT "LOXT 업데이트" "기존 기록과 모델을 유지하며 새 버전과 변환 환경을 준비합니다."
+    !insertmacro MUI_HEADER_TEXT "$(LoxtInstaller033)" "$(LoxtInstaller034)"
   ${ElseIf} $SorinoteAction == "repair"
-    !insertmacro MUI_HEADER_TEXT "LOXT 복구" "앱 파일을 복구한 뒤 모델과 변환 환경을 확인합니다."
+    !insertmacro MUI_HEADER_TEXT "$(LoxtInstaller035)" "$(LoxtInstaller036)"
   ${EndIf}
-  !insertmacro SorinoteProgressControl "STATIC" "프로그램 파일 설치 진행률" 0 12 1805
-  !insertmacro SorinoteProgressControl "STATIC" "전체 설치: 1/3단계 · LOXT 프로그램 설치 중" 37 14 1800
-  !insertmacro SorinoteProgressControl "STATIC" "1. 프로그램 설치 중$\r$\n2. 선택 모델 다운로드 대기$\r$\n3. 설치 마무리 대기" 54 38 1801
-  !insertmacro SorinoteProgressControl "STATIC" "모델 다운로드 · 프로그램 설치 후 시작합니다." 95 12 1802
-  !insertmacro SorinoteProgressControl "STATIC" "체크한 모델만 다운로드합니다. 이미 설치된 파일은 확인 후 재사용합니다." 109 12 1804
+  !insertmacro SorinoteProgressControl "STATIC" "$(LoxtInstaller037)" 0 12 1805
+  !insertmacro SorinoteProgressControl "STATIC" "$(LoxtInstaller038)" 37 14 1800
+  !insertmacro SorinoteProgressControl "STATIC" "$(LoxtInstaller039)" 54 38 1801
+  !insertmacro SorinoteProgressControl "STATIC" "$(LoxtInstaller040)" 95 12 1802
+  !insertmacro SorinoteProgressControl "STATIC" "$(LoxtInstaller041)" 109 12 1804
   !insertmacro SorinoteProgressControl "msctls_progress32" "" 123 10 1803
   ${If} $SorinoteModels == ""
     GetDlgItem $0 $SorinoteInstallPage 1801
-    SendMessage $0 ${WM_SETTEXT} 0 "STR:1. 프로그램 설치 중$\r$\n2. 모델 다운로드 생략$\r$\n3. 설치 마무리 대기"
+    SendMessage $0 ${WM_SETTEXT} 0 "STR:$(LoxtInstaller042)"
     GetDlgItem $0 $SorinoteInstallPage 1802
-    SendMessage $0 ${WM_SETTEXT} 0 "STR:모델 다운로드 생략 · 앱 설정에서 나중에 설치할 수 있습니다."
+    SendMessage $0 ${WM_SETTEXT} 0 "STR:$(LoxtInstaller043)"
     GetDlgItem $0 $SorinoteInstallPage 1804
-    SendMessage $0 ${WM_SETTEXT} 0 "STR:프로그램만 설치합니다."
+    SendMessage $0 ${WM_SETTEXT} 0 "STR:$(LoxtInstaller044)"
     GetDlgItem $0 $SorinoteInstallPage 1803
     ShowWindow $0 ${SW_HIDE}
   ${EndIf}
   ${If} $SorinoteAction == "models"
-    StrCpy $SorinoteFirstStage "기존 앱 유지 · 모델 설치 도구 준비 완료"
+    StrCpy $SorinoteFirstStage "$(LoxtInstaller045)"
     GetDlgItem $0 $SorinoteInstallPage 1805
-    SendMessage $0 ${WM_SETTEXT} 0 "STR:모델 설치 도구 준비 진행률 · 앱 파일은 유지합니다."
+    SendMessage $0 ${WM_SETTEXT} 0 "STR:$(LoxtInstaller046)"
     GetDlgItem $0 $SorinoteInstallPage 1800
-    SendMessage $0 ${WM_SETTEXT} 0 "STR:전체 설치: 1/3단계 · 모델 설치 도구 준비 중"
+    SendMessage $0 ${WM_SETTEXT} 0 "STR:$(LoxtInstaller047)"
     GetDlgItem $0 $SorinoteInstallPage 1801
-    SendMessage $0 ${WM_SETTEXT} 0 "STR:1. 기존 앱 유지 · 모델 설치 도구 준비 중$\r$\n2. 선택 모델 다운로드 대기$\r$\n3. 설치 마무리 대기"
+    SendMessage $0 ${WM_SETTEXT} 0 "STR:$(LoxtInstaller048)"
     GetDlgItem $0 $SorinoteInstallPage 1802
-    SendMessage $0 ${WM_SETTEXT} 0 "STR:모델 추가 설치 · 선택한 모델만 확인합니다."
+    SendMessage $0 ${WM_SETTEXT} 0 "STR:$(LoxtInstaller049)"
     GetDlgItem $0 $SorinoteInstallPage 1804
-    SendMessage $0 ${WM_SETTEXT} 0 "STR:앱 버전, 현재 모델 선택과 보관함은 유지합니다."
+    SendMessage $0 ${WM_SETTEXT} 0 "STR:$(LoxtInstaller050)"
   ${EndIf}
   ${If} $SorinoteModels != ""
   ${AndIf} $SorinotePrepareState == ${BST_CHECKED}
     GetDlgItem $0 $SorinoteInstallPage 1800
     ${If} $SorinoteAction == "models"
-      SendMessage $0 ${WM_SETTEXT} 0 "STR:전체 설치: 1/5단계 · 모델 설치 도구 준비 중"
+      SendMessage $0 ${WM_SETTEXT} 0 "STR:$(LoxtInstaller051)"
     ${Else}
-      SendMessage $0 ${WM_SETTEXT} 0 "STR:전체 설치: 1/5단계 · LOXT 프로그램 설치 중"
+      SendMessage $0 ${WM_SETTEXT} 0 "STR:$(LoxtInstaller052)"
     ${EndIf}
   ${EndIf}
 FunctionEnd
@@ -386,4 +446,12 @@ Function SorinoteInstallModels
 FunctionEnd
 
 !include "${__FILEDIR__}\preparation-page.nsh"
+
+Function SorinoteInstallerAbort
+  ${If} $SorinotePreparationRunning == 1
+    MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "$(LoxtPreparationExit)" IDYES preparation_exit
+    Abort
+  ${EndIf}
+  preparation_exit:
+FunctionEnd
 !endif

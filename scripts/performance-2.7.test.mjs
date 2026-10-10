@@ -40,7 +40,7 @@ test('byte LRU preserves dirty, saving, loading and active documents even above 
 test('memo cache evicts oversized idle documents while preserving an edited active draft',async()=>{
  const savedWindow=globalThis.window,savedStorage=globalThis.localStorage,storage=new Map();
  globalThis.localStorage={getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)};
- globalThis.window={desktop:{remote:true,hostId:'cache-test',memos:{get:async()=>({revision:0,blocks:[block('large','X'.repeat(2_000_000))]}),save:async()=>{throw Error('offline');},pending(){},onFlush:()=>()=>{}},onLibraryChange:()=>()=>{}},addEventListener(){}};
+ globalThis.window={desktop:{remote:true,hostId:'cache-test',memos:{get:async()=>({revision:0,blocks:[block('large','X'.repeat(2_000_000))]}),save:async()=>{throw Error('offline');},pending(){},onFlush:()=>()=>{}},onLibraryChange:()=>()=>{}},addEventListener(){},dispatchEvent(){return true;}};
  const memo=await import('../src/memoStore.js?cache-protection-test');
  const edited=memo.memoEntry('edited');edited.listeners.add(()=>{});await memo.loadMemo('edited');memo.changeMemo('edited',[block('draft','내가 수정한 내용')]);
  for(let i=0;i<7;i++)await memo.loadMemo('idle-'+i);

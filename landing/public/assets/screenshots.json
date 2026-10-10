@@ -1,10 +1,10 @@
 {
-  "version": "2.7.0",
+  "version": "2.8.0",
   "examples": true,
   "liveInference": false,
   "modelCatalogExamples": true,
   "exampleAudio": "silent WAV and scripted transcript/speaker data; not accuracy or speed measurements",
-  "capturedAt": "2026-10-09T17:38:54.241Z",
+  "capturedAt": "2026-10-10T04:47:27.081Z",
   "images": [
     {
       "file": "sidebar-collapsed-work.png",
@@ -319,6 +319,20 @@
       "width": 1783,
       "height": 1079,
       "scenario": "paired-web-in-progress-ink-preview"
+    },
+    {
+      "file": "mobile-reapproval.png",
+      "width": 390,
+      "height": 844,
+      "scenario": "mobile-reapproval-preserves-document",
+      "example": true
+    },
+    {
+      "file": "web-reapproval.png",
+      "width": 1280,
+      "height": 900,
+      "scenario": "web-reapproval-preserves-document",
+      "example": true
     },
     {
       "file": "live-home.png",

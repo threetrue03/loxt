@@ -52,3 +52,6 @@
 .memo-editor [data-memo-guide-color="blue"]>.bn-block>.bn-block-group{border-left-color:var(--bn-colors-highlights-blue-text,currentColor)}
 .memo-editor [data-memo-guide-color="purple"]>.bn-block>.bn-block-group{border-left-color:var(--bn-colors-highlights-purple-text,currentColor)}
 .memo-editor [data-memo-guide-color="pink"]>.bn-block>.bn-block-group{border-left-color:var(--bn-colors-highlights-pink-text,currentColor)}
+
+@media(pointer:coarse){.memo-toolbar .document-back{width:44px;min-width:44px}}
+@media(max-height:500px) and (pointer:coarse){.memo-toolbar{padding:3px 4px;gap:4px}.memo-toolbar .document-identity{flex:1 1 110px;min-width:0;gap:3px}.memo-toolbar .document-identity input{flex:1;width:90px}.memo-tools{flex-wrap:nowrap;gap:3px}.memo-tools .menu-trigger span,.memo-outline-toggle span{display:none}.memo-tools>button,.memo-tools .menu-trigger{padding:5px 7px}.memo-scroll .bn-editor{padding:16px 20px 40px}.memo-toolbar .memo-save-status{max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}

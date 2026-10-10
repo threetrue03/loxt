@@ -186,6 +186,12 @@ html[data-theme="light"]{color-scheme:light;--side:#F6F6F4}
 
 @container(max-width:560px){.transcript-frame{min-height:80px}.bottom-controls .recording{grid-template-columns:minmax(0,1fr)}.bottom-controls .record-actions{grid-column:1/-1;grid-row:3;min-width:0}.bottom-controls .live-record-actions .live-model-select,.bottom-controls .live-record-actions .record-start-group{width:calc(50% - 6px);max-width:100%;flex-shrink:1;min-width:0}.segment-text{min-width:0;overflow-wrap:anywhere}.detail-tabs{gap:8px;flex-wrap:wrap}}
 
+.workspace-player-actions{display:flex;align-items:center;gap:10px;margin-left:auto;flex-wrap:wrap;min-width:0}.workspace-player-actions>.secondary{white-space:nowrap;flex-shrink:0}
+@container(max-width:560px){.workspace-player .workspace-player-actions{grid-column:1/-1;justify-content:flex-end;margin-left:0}.workspace-player .workspace-player-actions .speed-select{margin-right:auto}.workspace-player .workspace-player-actions>.secondary{justify-self:auto;min-width:max-content}}
+@media(pointer:coarse){.workspace-menu .menu-trigger,.view-switch button,.note-card .more,.sort-select .menu-trigger,.library-search .menu-trigger,.workspace-player-actions .secondary,.workspace-player-actions .speed-select .menu-trigger,.workspace-player .play{min-width:44px;min-height:44px}.bottom-controls .record-start-group{grid-template-columns:minmax(0,1fr) 44px}.bottom-controls .record-start-group .microphone-menu,.bottom-controls .record-start-group .microphone-menu .menu-trigger{width:44px;min-width:44px;min-height:44px}.bottom-controls .record-start-group:has(>button:only-child){grid-template-columns:1fr}.script-actions>button{min-width:44px}}
+@media(pointer:coarse){.library-actions>.secondary,.library-search>button{min-width:44px;min-height:44px}}
+@media(max-height:500px) and (pointer:coarse){.workspace-main .content.workspace{padding:4px max(4px,env(safe-area-inset-right)) 4px max(4px,env(safe-area-inset-left))}}
+
 /* Shared settings use the existing charcoal surfaces, SUIT and control styles. */
 .settings-panel{max-width:1120px;padding:28px 28px 48px;margin:0;container-type:inline-size}
 .settings-panel .heading h1{font-size:28px;font-weight:650}

@@ -30,7 +30,7 @@ import { fonts, taskLabel } from './uiPreferences.js';
 import NoteDetail from './NoteDetail.jsx';
 import SettingsPage from './SettingsPage.jsx';
 import SettingsSidebar from './SettingsSidebar.jsx';
-import { useSettings } from './SettingsProvider.jsx';
+import { useSettings, cleanError } from './SettingsProvider.jsx';
 import { formatTime, folderStorageKey, loadFolders } from './data.js';
 
 const filterNames = { all: '홈', library: '모든 기록', recent: '최근 기록', trash: '휴지통', '': '내 보관함' };
@@ -42,6 +42,7 @@ export default function App({ onRecordingActivity, workspaceActive = true, liveA
   const [draftOpen, setDraftOpen] = useState(false);
   const [draftFolder, setDraftFolder] = useState('');
   const [filter, setFilter] = useState('all');
+  const [filterScope, setFilterScope] = useState('system');
   const sharedSettings = useSettings();
   const { open: settingsOpen, tab: settingsTab } = sharedSettings;
   const [pageView, setPageView] = useState('list');
@@ -164,11 +165,11 @@ export default function App({ onRecordingActivity, workspaceActive = true, liveA
     catch (error) { toast(error.message); }
   }
   function toast(message) {
-    setNotice({ text: message, id: performance.now() }); clearTimeout(toastTimer.current);
+    setNotice({ text: cleanError(message), id: performance.now() }); clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setNotice(''), 3000);
   }
-  function navigate(nextFilter) {
-    setFilter(nextFilter); setView('list'); setCreatingFolder(null); setRenaming(null); setActionMenu(null); setTrashSelection([]);
+  function navigate(nextFilter, scope = folders.includes(nextFilter) ? 'folder' : 'system') {
+    setFilterScope(scope);setFilter(nextFilter); setView('list'); setCreatingFolder(null); setRenaming(null); setActionMenu(null); setTrashSelection([]);
   }
   function openActions(event, target, context) {
     event.preventDefault(); event.stopPropagation();
@@ -293,12 +294,12 @@ export default function App({ onRecordingActivity, workspaceActive = true, liveA
   }
   function discardDraft(library) {
     applyLibrary(library); setBusy(false); setDraftOpen(false);
-    navigate(filter); toast('녹음을 버렸습니다.');
+    navigate(filter,filterScope); toast('녹음과 첨부 메모를 휴지통으로 옮겼습니다.');
   }
 
-  const label = Object.hasOwn(filterNames, filter) ? filterNames[filter] : leafName(filter, folderParents);
+  const label = filterScope === 'system' && Object.hasOwn(filterNames, filter) ? filterNames[filter] : leafName(filter, folderParents);
   const children = ['recent', 'trash'].includes(filter) ? [] : folders.filter(folder => parentOf(folder, folderParents) === (folders.includes(filter) ? filter : ''));
-  let visible = notes.filter(n => (filter === 'trash' ? n.deleted : !n.deleted) && (filter === '' ? !n.folder : Object.hasOwn(filterNames, filter) || n.folder === filter));
+  let visible = notes.filter(n => (filter === 'trash' ? n.deleted : !n.deleted) && (filter === '' ? !n.folder : filterScope === 'system' && Object.hasOwn(filterNames, filter) || n.folder === filter));
   visible.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
   if (filter === 'recent') visible = visible.slice(0, 5);
   if (sort === 'title') visible = [...visible].sort((a, b) => a.title.localeCompare(b.title, 'ko'));
@@ -314,7 +315,7 @@ export default function App({ onRecordingActivity, workspaceActive = true, liveA
       <div className="brand"><button className="sidebar-toggle" title="사이드바 열기·닫기 · Ctrl + Shift + S" onClick={() => setSidebarCollapsed(value => !value)} aria-label={sidebarCollapsed ? '사이드바 펼치기' : '사이드바 접기'} aria-expanded={!sidebarCollapsed}><Icon name="sidebar"/><span className="label">사이드바 닫기</span></button></div>
       <button className="primary sidebar-create" onClick={newRecording} disabled={!loaded || busy}><Icon name="mic"/><span className="label">새 녹음</span></button>
       <button className="upload" disabled={!loaded || busy} onClick={importAudio}><Icon name="upload"/><span className="label">파일 불러오기</span></button>
-      {!window.desktop.remote && <button className="upload" disabled={!loaded} onClick={() => setModal({ type: 'youtube' })} title="YouTube 불러오기"><Icon name="youtube"/><span className="label">YouTube 불러오기</span></button>}
+      {!window.desktop.remote && <button className="upload" disabled={!loaded || busy} onClick={() => setModal({ type: 'youtube' })} title="YouTube 불러오기"><Icon name="youtube"/><span className="label">YouTube 불러오기</span></button>}
       <nav className="nav" aria-label="녹음 목록">{[['all', 'home'], ['recent', 'clock'], ['trash', 'trash']].map(([key, icon]) => <button key={key} className={filter === key && view === 'list' ? 'active' : ''} onClick={() => navigate(key)} title={filterNames[key]}><Icon name={icon}/><span className="label">{filterNames[key]}</span></button>)}</nav>
       <div className="folder-heading">폴더<button aria-label="새 폴더" disabled={!loaded} onClick={() => { setSidebarCollapsed(false); setSidebarParent(folders.includes(filter) ? filter : ''); setSidebarCreating(true); }}><Icon name="plus"/></button></div>
       <button data-folder-drop="" className={`library-root ${filter === '' && view === 'list' ? 'active' : ''}`} onClick={() => navigate('')} title="내 보관함"><Icon name="folder"/><span className="label">내 보관함</span></button>{sidebarCreating && !sidebarParent ? <div className="sidebar-inline-folder"><Icon name="folder"/><InlineName value="" label="새 폴더 이름" allowEmptyCancel maxLength={80} onSave={async name => { applyLibrary(await window.desktop.createFolder(name,sidebarParent)); setSidebarCreating(false); }} onCancel={() => setSidebarCreating(false)}/></div> : null}<FolderTree creatingParent={sidebarCreating ? sidebarParent : undefined} draft={<div className="sidebar-inline-folder"><Icon name="folder"/><InlineName value="" label="새 폴더 이름" allowEmptyCancel maxLength={80} onSave={async name => { applyLibrary(await window.desktop.createFolder(name,sidebarParent)); setSidebarCreating(false); }} onCancel={() => setSidebarCreating(false)}/></div>} folders={folders} parents={folderParents} selected={view === 'list' ? filter : ''} onOpen={navigate} onMenu={openFolderMenu}/>
@@ -324,18 +325,18 @@ export default function App({ onRecordingActivity, workspaceActive = true, liveA
     <main className="main">{view === 'list' && !['all','recent','trash'].includes(filter) ? <MobileLibraryTools onTrash={() => navigate('trash')}/> : null}{recovery ? <p className="recovery-message" role="status">보관함 목록을 {recovery.backup ? "백업과 녹음 메타데이터" : "녹음 메타데이터"}로 복구했습니다. {recovery.skipped ? `${recovery.skipped}개 항목은 읽지 못해 복구에서 제외했습니다. 원본 파일은 보존됩니다. ` : ""}{!recovery.backup ? "빈 폴더 등 메타데이터에 없는 정보는 복구되지 않을 수 있습니다." : "백업 시점 이후의 빈 폴더 변경은 확인이 필요합니다."}<button className="secondary" onClick={() => setRecovery(null)}>확인</button></p> : null}
 
       {view === 'models' ? <ModelStore mode="work" onBack={() => navigate('all')}/> : null}
-      {view === 'list' && filter === 'all' ? <HomePage mode="work" loaded={loaded} busy={busy} notes={notes} folders={folders} parents={folderParents} recent={recent} jobs={backgroundEnvironment.queue.filter(job => !job.workspace || job.workspace === 'work')} recording={busy && draftOpen ? { title: 'Work 녹음', status: '녹음으로 돌아가 계속 기록하세요.', onOpen: () => { setSelectedId(null); setView('workspace'); } } : null} onRecord={newRecording} onImport={importAudio} onYouTube={() => setModal({type:'youtube'})} onMemo={newMemo} onFolder={() => createFolderInline('')} onLibrary={() => navigate('library')} onRoot={() => navigate('')} onJob={openBackgroundJob} onModels={() => setView("models")}
+      {view === 'list' && filter === 'all' ? <HomePage mode="work" loaded={loaded} busy={busy} notes={notes} folders={folders} parents={folderParents} recent={recent} jobs={backgroundEnvironment.queue.filter(job => !job.workspace || job.workspace === 'work')} recording={busy && draftOpen ? { title: 'Work 녹음', status: '녹음으로 돌아가 계속 기록하세요.', onOpen: () => { setSelectedId(null); setView('workspace'); } } : null} onRecord={newRecording} onImport={importAudio} onYouTube={() => setModal({type:'youtube'})} onMemo={newMemo} onFolder={() => createFolderInline('')} onLibrary={() => navigate('library','system')} onRoot={() => navigate('')} onJob={openBackgroundJob} onModels={() => setView("models")}
         renderNote={note => <NoteCard key={note.id} note={note} mode="work" onOpen={() => openNote(note.id)} onMenu={(event, context) => openActions(event, { type: 'note', id: note.id, folder: note.folder, deleted: note.deleted, note }, context)} editing={renaming?.type === 'note' && renaming.id === note.id} onRename={title => changeNoteFromMenu(note.id, { title })} onCancelRename={() => setRenaming(null)}/>}
         renderFolder={folder => <FolderCard key={folder} folder={folder} name={leafName(folder, folderParents)} onOpen={() => navigate(folder)} onMenu={(event, context) => openFolderMenu(event, folder, context)}/>}
-      /> : view === 'list' ? <LibraryView recordingBusy={busy} mode="work" renameTarget={renaming} onRenameEnd={() => setRenaming(null)} folder={filter} active={workspaceActive} onNavigate={navigate} onOpen={openNote} onRecord={(_mode,folder) => { newRecording(); if (!draftOpen) setDraftFolder(folder); }} onImport={importAudio} onYouTube={() => setModal({type:'youtube'})}/> : null}
+      /> : view === 'list' ? <LibraryView recordingBusy={busy} mode="work" renameTarget={renaming} onRenameEnd={() => setRenaming(null)} folder={filter} scope={filterScope} active={workspaceActive} onNavigate={navigate} onOpen={openNote} onRecord={(_mode,folder) => { newRecording(); if (!draftOpen) setDraftFolder(folder); }} onImport={importAudio} onYouTube={() => setModal({type:'youtube'})}/> : null}
       {draftOpen ? <div className="workspace-host" hidden={view !== 'workspace' || selectedId !== null}><NoteDetail workspaceActive={workspaceActive} note={null} environment={environment} folders={folders} folderParents={folderParents} initialFolder={draftFolder} onFinish={finishRecording} onDiscard={discardDraft} onBusy={setBusy} onNotice={toast} preferences={preferences} onPreferences={changePreferences} draftKey={draftKey} onBack={() => navigate(filter)}/></div> : null}
       {selected && (view === 'workspace' || (view === 'settings' && pageView === 'workspace')) ? <div className="workspace-host" hidden={view !== 'workspace'}>{selected.kind === 'pdf' ? <PdfHost note={selected} mode="work" onBack={() => navigate(filter)} onUpdate={change => updateNote(selected.id,change)}/> : selected.kind === 'memo' ? <MemoPage key={selected.id} note={selected} onBack={() => navigate(filter)} onUpdate={change => updateNote(selected.id, change)}/> : <NoteDetail workspaceActive={workspaceActive} note={selected} environment={environment} folders={folders} folderParents={folderParents} onCopy={copyTranscript} onConvert={convertSelected} onCancel={() => cancelTranscription(selected.id)} onBack={() => navigate(filter)} onUpdate={change => updateNote(selected.id, change)} onExport={exportTranscript}/>}</div> : null}
       {view === 'settings' ? <SettingsPage mode="work"/> : null}
     </main>
     <MobileNavigation filter={filter} settings={settingsOpen} hidden={view === 'workspace'} onNavigate={navigate} onSettings={() => openSettings()}/>
-    {modal?.type === 'trash-confirm' ? <Modal title="휴지통으로 이동" onClose={closeModal}><p className="hint">{modal.ids.length}개 기록을 휴지통으로 이동할까요?</p><button className="primary danger" disabled={trashWorking} onClick={async()=>{try { applyLibrary(await window.desktop.manageLibrary({workspace:'work',action:'trash',ids:modal.ids,folders:[]}));closeModal(); } catch(error){toast(error.message);}}}>휴지통으로 이동</button></Modal>:null}
-    {actionMenu ? <ActionMenu target={actionMenu} folders={folders} parents={folderParents} onClose={closeActionMenu} onRename={beginRename} onMove={async (id,folder) => applyLibrary(await window.desktop.manageLibrary({workspace:'work',action:'move',ids:[id],folders:[],folder}))} onTrash={(id,deleted) => deleted ? setModal({type:'trash-confirm',ids:[id]}) : processTrash([id])} onDeleteFolder={folder => setModal({type:'delete-folder',folder})}/> : null}
-    {modal?.type === 'delete-folder' ? <Modal title="폴더 삭제" onClose={() => { if (!trashWorking) closeModal(); }}><p className="hint">{modal.folder} 및 하위 폴더를 삭제합니다. 폴더 안의 녹음과 메모는 휴지통으로 이동하며, 복구하면 내 보관함에 저장됩니다.</p><button className="primary full-width danger" disabled={trashWorking} onClick={() => removeFolder(modal.folder)}>{trashWorking ? '처리 중…' : '폴더 삭제'}</button></Modal> : null}
+    {modal?.type === 'trash-confirm' ? <Modal title="휴지통으로 이동" onClose={closeModal}><p className="hint">{modal.ids.length + (modal.folders?.length || 0)}개 항목{modal.folders?.length ? "과 하위 기록" : ""}을 휴지통으로 이동할까요? 폴더 구조와 첨부 메모도 함께 복구할 수 있습니다.</p><button className="primary danger" disabled={trashWorking} onClick={async()=>{if(trashWorking)return;setTrashWorking(true);try { applyLibrary(await window.desktop.manageLibrary({workspace:'work',action:'trash',ids:modal.ids,folders:modal.folders || []}));closeModal(); } catch(error){toast(error.message);}finally{setTrashWorking(false);}}}>휴지통으로 이동</button></Modal>:null}
+    {actionMenu ? <ActionMenu target={actionMenu} folders={folders} parents={folderParents} onClose={closeActionMenu} onRename={beginRename} onMove={async (id,folder) => applyLibrary(await window.desktop.manageLibrary({workspace:'work',action:'move',ids:actionMenu.type === 'folder' ? [] : [id],folders:actionMenu.type === 'folder' ? [id] : [],folder}))} onTrash={(id,deleted) => deleted ? setModal({type:'trash-confirm',ids:actionMenu.type === 'folder' ? [] : [id],folders:actionMenu.type === 'folder' ? [id] : []}) : processTrash([id])} onDeleteFolder={folder => setModal({type:'delete-folder',folder})}/> : null}
+    {modal?.type === 'delete-folder' ? <Modal title="폴더 삭제" onClose={() => { if (!trashWorking) closeModal(); }}><p className="hint">{modal.folder} 및 하위 폴더를 삭제합니다. 폴더 안의 녹음과 메모는 휴지통으로 이동하며, 복구하면 원래 폴더 구조를 함께 복원합니다.</p><button className="primary full-width danger" disabled={trashWorking} onClick={() => removeFolder(modal.folder)}>{trashWorking ? '처리 중…' : '폴더 삭제'}</button></Modal> : null}
     {modal?.type === 'delete-trash' ? <Modal title={modal.all ? '휴지통 모두 비우기' : '기록 영구 삭제'} onClose={() => { if (!trashWorking) closeModal(); }}><p className="hint">{modal.ids.length}개의 기록과 메모·첨부파일을 영구 삭제합니다. 삭제 후에는 복구할 수 없습니다.</p><button className="primary full-width danger" disabled={trashWorking} onClick={() => processTrash(modal.ids,true)}>{trashWorking ? '삭제 중…' : '영구 삭제'}</button></Modal> : null}
     {modal?.type === 'youtube' ? <YouTubeDialog folders={folders} parents={folderParents} initialFolder={folders.includes(filter) ? filter : ''} environment={environment} onClose={closeModal} onStarted={() => { closeModal(); toast('음성을 가져온 뒤 선택한 모델로 변환합니다.'); }}/> : null}
     {modal?.type === 'youtube-progress' ? <YouTubeProgress jobs={imports} onClose={closeModal} onCancel={cancelBackgroundJob}/> : null}

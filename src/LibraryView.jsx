@@ -19,7 +19,7 @@ import useLibrarySelection from './useLibrarySelection.jsx';
 import NoteDetail from './NoteDetail.jsx';
 import MemoPage from './MemoPage.jsx';
 import YouTubeDialog from './YouTubeDialog.jsx';
-import { useSettings } from './SettingsProvider.jsx';
+import { useSettings, cleanError } from './SettingsProvider.jsx';
 import { serializeTranscript } from '../shared/transcript.js';
 
 export function libraryApi(mode) { return mode === 'live' ? window.desktop.live : window.desktop; }
@@ -31,9 +31,9 @@ export async function refreshLibrary(mode){
  const request=(async()=>{let data;do{const token=generation.get(mode)||0;const old=lists.get(mode);const response=window.desktop.getLibraryCatalog?await window.desktop.getLibraryCatalog({workspace:mode,since:old?.revision}):await libraryApi(mode).getLibrary();if(response.delta){const notes=new Map((old?.notes||[]).map(n=>[n.id,n]));for(const id of response.remove)notes.delete(id);for(const n of response.upsert)notes.set(n.id,n);data={...old,...response,notes:[...notes.values()]};}else data=response;if((lists.get(mode)?.revision??-1)<=(data.revision??0)){lists.set(mode,data);listeners.get(mode)?.forEach(fn=>fn(data));}if(token===(generation.get(mode)||0))break;}while(true);return data;})();
  pending.set(mode,request);try{return await request;}finally{if(pending.get(mode)===request)pending.delete(mode);}
 }
-export function useLibraryData(mode){const [data,setData]=useState(()=>lists.get(mode)||{notes:[],folders:[],folderParents:{}}),[error,setError]=useState('');useEffect(()=>{setError('');const off=subscribeLibrary(mode,setData);refreshLibrary(mode).catch(e=>setError(e.message));return off;},[mode]);return {data,error:error||data.indexError||''};}
+export function useLibraryData(mode){const [data,setData]=useState(()=>lists.get(mode)||{notes:[],folders:[],folderParents:{}}),[error,setError]=useState('');useEffect(()=>{setError('');const off=subscribeLibrary(mode,setData);refreshLibrary(mode).catch(e=>setError(cleanError(e)));return off;},[mode]);return {data,error:error||data.indexError||''};}
 const filterNames = { library: '모든 기록', recent: '최근 기록', trash: '휴지통' };
-export default function LibraryView({ recordingBusy = false, mode, folder: controlled, onNavigate, onOpen, onRecord, onImport, onYouTube, renameTarget, onRenameEnd, state = {}, onState, active = true }) {
+export default function LibraryView({ recordingBusy = false, mode, folder: controlled, scope: controlledScope, onNavigate, onOpen, onRecord, onImport, onYouTube, renameTarget, onRenameEnd, state = {}, onState, active = true }) {
   const activities=useContext(RecordingActivityContext); recordingBusy=recordingBusy || activities[mode];
   const { data, error: loadError } = useLibraryData(mode), api = libraryApi(mode), settings = useSettings();
   const [local, setLocal] = useState(state), [creating, setCreating] = useState(false), [renaming, setRenaming] = useState(null), [menu, setMenu] = useState(null), [addMenu, setAddMenu] = useState(null), [modal, setModal] = useState(null), [working, setWorking] = useState(false), [error, setError] = useState('');
@@ -42,7 +42,8 @@ export default function LibraryView({ recordingBusy = false, mode, folder: contr
   const root = useRef(null), search = useRef(null), request = useRef(0), management = useRef(Promise.resolve()), localRef = useRef(local); localRef.current = local;
   useMenuKeyboard(addPopup,Boolean(addMenu),()=>setAddMenu(null));
   const folder = controlled ?? local.folder ?? '', query = local.query || '', field = local.field || 'both', sort = local.sort || 'date', layout = local.layout || settings.preferences[mode].layout;
-  const selected = useFullNote(data.notes.find(n => n.id === local.id),mode), special = Object.hasOwn(filterNames, folder);
+  const scope = controlledScope ?? local.scope ?? (data.folders.includes(folder) ? 'folder' : Object.hasOwn(filterNames,folder) ? 'system' : 'folder');
+  const selected = useFullNote(data.notes.find(n => n.id === local.id),mode), special = scope === 'system' && Object.hasOwn(filterNames, folder);
   const change = values => setLocal(previous => ({ ...previous, ...values }));
   useEffect(() => { onState?.({ ...local, title: selected?.title }); }, [local, selected?.title]);
   useEffect(() => { if (renameTarget) setRenaming(renameTarget); }, [renameTarget]);
@@ -59,18 +60,20 @@ export default function LibraryView({ recordingBusy = false, mode, folder: contr
     const token = ++request.current;
     if (!query.trim() || special) { setMatched(null); setQueryBusy(false); return; }
     setQueryBusy(true);
-    const timer = setTimeout(() => window.desktop.searchLibrary({ workspace: mode, folder, query, field }).then(ids => { if (token === request.current) { setMatched(ids); setQueryBusy(false); } }).catch(e => { if (token === request.current) { setError(e.message); setQueryBusy(false); } }), 180);
+    const timer = setTimeout(() => window.desktop.searchLibrary({ workspace: mode, folder, query, field }).then(ids => { if (token === request.current) { setMatched(ids); setQueryBusy(false); } }).catch(e => { if (token === request.current) { setError(cleanError(e)); setQueryBusy(false); } }), 180);
     return () => { clearTimeout(timer); ++request.current; };
   }, [query, field, folder, mode, data.revision]);
 
-  function navigate(next) { change({ folder: next, id: null, query: '', scroll: 0 }); setCreating(false); setRenaming(null); onNavigate?.(next); }
+  function navigate(next) { change({ folder: next, scope:'folder', id: null, query: '', scroll: 0 }); setCreating(false); setRenaming(null); onNavigate?.(next,'folder'); }
   function open(id) { if (onOpen) onOpen(id); else change({ id }); }
-  const [restoreNotice,setRestoreNotice]=useState('');
-  async function run(task) { if (working) return; setWorking(true); setError(''); try { const result = await task(); await refreshLibrary(mode);if(result?.restoredFolders?.length)setRestoreNotice(result.restoredFolders.map(f=>f.from===f.to?'원래 폴더 구조를 복구했습니다.':`같은 이름의 폴더를 보존하고 ${f.to}에 복구했습니다.`).join(' ')); return result; } catch(e) { setError(e.message); } finally { setWorking(false); } }
+  const [restoreNotice,setRestoreNotice]=useState(''),[errorDetails,setErrorDetails]=useState('');const retryTask=useRef(null);
+  function reportError(error){setError(cleanError(error));setErrorDetails(error.message||String(error));}
+  async function run(task) { if (working) return; retryTask.current=task;setWorking(true); setError(''); try { const result = await task(); await refreshLibrary(mode);if(result?.restoredFolders?.length)setRestoreNotice(result.restoredFolders.map(f=>f.from===f.to?'원래 폴더 구조를 복구했습니다.':`같은 이름의 폴더를 보존하고 ${f.to}에 복구했습니다.`).join(' ')); return result; } catch(e) { reportError(e); } finally { setWorking(false); } }
   async function manage(action, ids = [], folders = [], destination = '') {
+    retryTask.current=()=>manage(action,ids,folders,destination);
     const task=management.current.catch(()=>{}).then(()=>window.desktop.manageLibrary({workspace:mode,action,ids,folders,folder:destination}));
     management.current=task;setWorking(true);setError('');
-    try { const result=await task;await refreshLibrary(mode);return result; } catch(error){setError(error.message);}finally{if(management.current===task)setWorking(false);}
+    try { const result=await task;await refreshLibrary(mode);return result; } catch(error){reportError(error);}finally{if(management.current===task)setWorking(false);}
   }
   async function newDrawing() { const result=await run(()=>window.desktop.pdf.create({workspace:mode,folder:special?'':folder}));if(result?.note)open(result.note.id); }
   async function importPDF() { const result=await run(()=>window.desktop.pdf.import({workspace:mode,folder:special ? '' : folder})); if(result?.note)open(result.note.id); }
@@ -86,18 +89,18 @@ export default function LibraryView({ recordingBusy = false, mode, folder: contr
   async function create(name) { const result = await run(() => api.createFolder(name, special ? '' : folder)); if (!result) throw new Error('폴더를 만들지 못했습니다.'); setCreating(false); }
   async function rename(target, name) { const result = await run(() => target.type === 'folder' ? api.renameFolder(target.id, name) : api.updateNote(target.id, { title: name })); if (!result) throw new Error('이름을 저장하지 못했습니다.'); if (result.renamed?.[folder]) navigate(result.renamed[folder]); setRenaming(null); onRenameEnd?.(); }
   function actions(event, target, context) { event.preventDefault(); event.stopPropagation(); const box = event.currentTarget.getBoundingClientRect(); const key = target.type === "folder" ? "folder:" + target.id : target.id; const ids = selection.ids.includes(key) ? [...selection.ids] : [key]; if (!selection.ids.includes(key)) selection.clear(); setMenu({ ...target, ids, trigger: event.currentTarget, x: context ? event.clientX : box.left, y: context ? event.clientY : box.bottom + 4 }); }
-  const children = ['recent', 'trash'].includes(folder) ? [] : data.folders.filter(f => parentOf(f, data.folderParents) === (special ? '' : folder)).filter(f => !query || field !== 'content' && folderName(f, data.folderParents).toLocaleLowerCase('ko').includes(query.toLocaleLowerCase('ko')));
-  let notes = data.notes.filter(n => (folder === 'trash' ? n.deleted : !n.deleted) && (special || n.folder === folder));
+  const children = special && ['recent', 'trash'].includes(folder) ? [] : data.folders.filter(f => parentOf(f, data.folderParents) === (special ? '' : folder)).filter(f => !query || field !== 'content' && folderName(f, data.folderParents).toLocaleLowerCase('ko').includes(query.toLocaleLowerCase('ko')));
+  let notes = data.notes.filter(n => (special && folder === 'trash' ? n.deleted : !n.deleted) && (special || n.folder === folder));
   notes.sort((a,b) => sort === 'title' ? a.title.localeCompare(b.title,'ko') || a.id.localeCompare(b.id) : (b.createdAt || '').localeCompare(a.createdAt || '') || a.id.localeCompare(b.id));
-  if (folder === 'recent') notes = notes.slice(0,5);
+  if (special && folder === 'recent') notes = notes.slice(0,5);
   if (query && !special) notes = notes.filter(n => matched?.includes(n.id));
   const [range,setRange]=useState({notes:[]}),[pageCount,setPageCount]=useState(1),[rangeError,setRangeError]=useState('');
   useEffect(()=>setPageCount(1),[mode,folder,sort,query,field]);
-  useEffect(()=>{if(!window.desktop.getLibraryPage)return;let active=true;setRangeError('');const requests=Array.from({length:pageCount},(_,i)=>window.desktop.getLibraryPage({workspace:mode,folder,sort,offset:i*120,limit:120,ids:query?matched||[]:undefined}));Promise.all(requests).then(pages=>{if(active)setRange({notes:pages.flatMap(p=>p.notes),revision:pages[0]?.revision,scope:mode+':'+folder+':'+sort+':'+query});}).catch(e=>{if(active)setRangeError(e.message);});return()=>{active=false;};},[mode,folder,sort,query,matched,data.revision,pageCount]);
-  const previews=new Map(range.scope===mode+':'+folder+':'+sort+':'+query?range.notes.map(n=>[n.id,n]):[]);
+  useEffect(()=>{if(!window.desktop.getLibraryPage)return;let active=true;setRangeError('');const requests=Array.from({length:pageCount},(_,i)=>window.desktop.getLibraryPage({workspace:mode,folder,scope,sort,offset:i*120,limit:120,ids:query?matched||[]:undefined}));Promise.all(requests).then(pages=>{if(active)setRange({notes:pages.flatMap(p=>p.notes),revision:pages[0]?.revision,scope:mode+':'+scope+':'+folder+':'+sort+':'+query});}).catch(e=>{if(active)setRangeError(cleanError(e));});return()=>{active=false;};},[mode,folder,scope,sort,query,matched,data.revision,pageCount]);
+  const previews=new Map(range.scope===mode+':'+scope+':'+folder+':'+sort+':'+query?range.notes.map(n=>[n.id,n]):[]);
   const displayed=notes.slice(0,pageCount*120).map(n=>previews.has(n.id)?{...n,...previews.get(n.id)}:n);
   const items = [...children.map(f => ({ id: 'folder:' + f, title: folderName(f,data.folderParents) })), ...notes];
-  const selection = useLibrarySelection({ visible: items, enabled: active && !selected, scope: `${mode}:${folder}:${local.id || ''}`, onMove: (ids, target) => move(ids, target) });
+  const selection = useLibrarySelection({ visible: items, enabled: active && !selected, scope: `${mode}:${scope}:${folder}:${local.id || ''}`, onMove: (ids, target) => move(ids, target) });
   function split(ids) { return { ids: ids.filter(id => !id.startsWith('folder:')), folders: ids.filter(id => id.startsWith('folder:')).map(id => id.slice(7)) }; }
   async function move(ids, target) { const values = split(ids); if (await manage('move',values.ids,values.folders,target)) selection.clear(); }
   function trash(ids) { const values = split(ids); if (ids.length) setModal({ action:'trash', ...values }); }
@@ -127,7 +130,7 @@ export default function LibraryView({ recordingBusy = false, mode, folder: contr
         {!special ? <div className="library-search"><Select label="검색 범위" value={field} onChange={value => change({field:value})} options={[{value:'title',label:'제목'},{value:'content',label:'내용'},{value:'both',label:'제목+내용'}]}/><input ref={search} aria-label="현재 폴더 검색" title="현재 폴더 검색 · Ctrl + F" placeholder="현재 폴더에서 찾기" value={query} maxLength={500} onChange={e => change({query:e.target.value})}/>{query ? <button aria-label="검색 해제" onClick={() => change({query:''})}><Icon name="close"/></button> : null}</div> : null}
         <div className="library-actions">{!special ? <button className="secondary" disabled={working} onClick={() => run(async () => { await flushMemos(); return window.desktop.exportFolder({workspace:mode,folder}); })}><Icon name="download"/>폴더 내보내기</button> : null}<Select className="sort-select" label="정렬" value={sort} onChange={value => change({sort:value})} options={[{value:'date',label:'최신순'},{value:'title',label:'이름순'}]}/>{folder === 'trash' ? <div className="trash-actions"><button className="secondary" onClick={selection.selectAll}>모두 선택</button><button className="secondary" disabled={!selection.ids.length || working} onClick={() => run(() => api.restoreTrash(selection.ids)).then(() => selection.clear())}>복구</button><button className="secondary danger" disabled={!selection.ids.length || working} onClick={() => setModal({action:'permanent',ids:selection.ids,folders:[]})}>삭제</button><button className="secondary danger" disabled={!notes.length || working} onClick={() => setModal({action:'permanent',ids:notes.map(n=>n.id),folders:[]})}>모두 비우기</button></div> : <Menu label="새로 추가하기" className="add-menu" trigger={<><Icon name="plus"/><span>새로 추가하기</span><Icon name="chevronDown"/></>}>{addItems}</Menu>}<div className="view-switch" role="group" aria-label="보관함 보기">{[['cards','grid','카드 보기'],['compact','compact','작은 카드 보기'],['list','list','목록 보기']].map(([value,icon,label])=><button key={value} aria-label={label} aria-pressed={layout===value} onClick={()=>change({layout:value})}><Icon name={icon}/></button>)}</div></div>
       </div>
-      {restoreNotice?<p className="hint" role="status">{restoreNotice}</p>:null}{loadError || error ? <p className="error-message" role="alert">{loadError || error}</p> : null}{queryBusy ? <p className="hint" role="status">검색 중…</p> : null}
+      {restoreNotice?<p className="hint" role="status">{restoreNotice}</p>:null}{loadError || error ? <div className="error-message" role="alert"><p>{loadError || error}</p><button className="secondary" disabled={working} onClick={()=>loadError?refreshLibrary(mode).catch(reportError):retryTask.current&&run(retryTask.current)}>다시 시도</button>{errorDetails && errorDetails!==error?<details><summary>오류 상세</summary><p>{errorDetails}</p></details>:null}</div> : null}{queryBusy ? <p className="hint" role="status">검색 중…</p> : null}
       <div className={`note-collection layout-${layout}`} {...selection.handlers}><div className="folder-collection">{creating ? <FolderCard creating editing name="" onRename={create} onCancelRename={()=>setCreating(false)}/> : null}{children.map(f=><FolderCard key={f} folder={f} itemId={'folder:'+f} selected={selection.selectedIds.has('folder:'+f)} name={folderName(f,data.folderParents)} onOpen={e=>selection.open(e,{id:'folder:'+f},()=>navigate(f))} editing={renaming?.id===f} onRename={name=>rename({type:'folder',id:f},name)} onCancelRename={()=>{setRenaming(null);onRenameEnd?.();}} onMenu={(e,c)=>actions(e,{type:'folder',id:f},c)}/>)}</div><div className="recording-collection">{layout==='list' && notes.length ? <div className="table-head"><span>기록 제목</span><span>작성 날짜</span><span>녹음 길이</span><span>변환 상태</span><span/></div>:null}{displayed.map(n=><NoteCard key={n.id} note={n} mode={mode} layout={layout} selected={selection.selectedIds.has(n.id)} selectable={folder==='trash'} checked={selection.ids.includes(n.id)} onCheck={value=>selection.toggle(n.id,value)} selectionDisabled={working} editing={renaming?.id===n.id} onRename={name=>rename({type:'note',id:n.id},name)} onCancelRename={()=>{setRenaming(null);onRenameEnd?.();}} onOpen={e=>selection.open(e,n,()=>{if(n.kind!=='folder')open(n.id);})} onMenu={(e,c)=>actions(e,{type:'note',id:n.id,folder:n.folder,deleted:n.deleted,note:n},c)}/>)}</div>{notes.length>displayed.length?<button className="secondary library-load-more" onClick={()=>setPageCount(c=>c+1)}>더 보기 · {notes.length-displayed.length}개 항목</button>:null}{rangeError?<p className="error-message" role="alert">{rangeError}</p>:null}{!notes.length && !children.length && !creating ? <div className="empty library-empty"><Icon name="folder"/><h2>{query ? '검색 결과가 없습니다' : folder==='trash' ? '휴지통이 비어 있습니다' : '보관함이 비어 있습니다'}</h2></div>:null}</div>
     </section>}
     {menu ? <ActionMenu target={menu} folders={data.folders} parents={data.folderParents} onClose={()=>setMenu(null)} onRename={target=>setRenaming(target)} onMove={(_id,destination)=>move(menu.ids,destination)} onTrash={(_id,deleted)=>{ if(deleted) trash(menu.ids);else run(()=>api.restoreTrash(menu.ids)); }} onDeleteFolder={()=>trash(menu.ids)}/> : null}

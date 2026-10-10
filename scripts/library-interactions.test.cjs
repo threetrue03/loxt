@@ -35,16 +35,20 @@ test('interrupted group move replays journal so all members reach the same desti
   const restarted = new Library(root); await restarted.ready;
   assert.ok((await restarted.list()).notes.every(note => note.folder === '강의'));
 });
-test('discard removes active recording and finalised draft without resurrection, preserving other audio', async () => {
+test('discard preserves active and finalised drafts in trash through restart, preserving other audio', async () => {
   const { root, library, a, b } = await fixture();
   const recording = await library.beginRecording({ title: '버릴 녹음', folder: '', mime: 'audio/webm' });
   await library.appendRecording({ id: recording.id, sequence: 0, bytes: new Uint8Array([1, 2, 3]) });
   await library.discardRecording(recording.id);
   assert.equal(library.sessions.size, 0);
-  await assert.rejects(fs.stat(path.join(root, 'recordings', recording.id)), { code: 'ENOENT' });
+  assert.ok(await fs.stat(path.join(root, 'recordings', recording.id)));
+  assert.equal((await library.detail(recording.id)).deleted,true);
+  assert.deepEqual(await fs.readFile((await library.getAudio(recording.id)).filename),Buffer.from([1,2,3]));
   await assert.rejects(library.discardRecording('../outside'));
   await library.discardRecording(a.id);
   const restarted = new Library(root); await restarted.ready;
-  assert.deepEqual((await restarted.list()).notes.map(note => note.id), [b.id]);
+  assert.deepEqual(new Set((await restarted.list()).notes.filter(note=>!note.deleted).map(note => note.id)), new Set([b.id]));
+  assert.equal((await restarted.detail(a.id)).deleted,true);
+  assert.equal((await restarted.detail(recording.id)).deleted,true);
   assert.equal(await fs.readFile((await restarted.getAudio(b.id)).filename, 'utf8'), 'original-audio');
 });

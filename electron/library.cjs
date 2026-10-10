@@ -373,14 +373,19 @@ class Library {
   discardRecording(id) {
     return this.enqueue(async () => {
       if (!ID.test(id)) throw new Error('녹음을 찾지 못했습니다.');
-      const session = this.sessions.get(id), note = this.data.notes.find(item => item.id === id);
+      const session = this.sessions.get(id), note = this.data.notes.find(item => item.id === id) || session?.note;
       if (!session && (!note || note.done || !['ready', 'recording'].includes(note.status))) throw new Error('진행 중인 새 녹음만 버릴 수 있습니다.');
-      const next = { ...this.data, notes: this.data.notes.filter(item => item.id !== id) };
-      const journal = { version: 1, data: next, ids: [id] };
-      await atomicJson(path.join(this.root, 'trash-delete.json'), journal); this.trashDeletePending = true;
-      if (session && !session.closed) { await session.handle.close(); session.closed = true; }
+      if (!note) throw new Error('녹음을 찾지 못했습니다.');
+      const seconds=session?.note.mime==='audio/wav'?session.bytes/32000:session?.note.seconds ?? note.seconds;
+      const changed = { ...note, seconds, duration:duration(seconds), deleted: true, status: 'ready', discarded: true };
+      const next = { ...this.data, notes: [changed,...this.data.notes.filter(item=>item.id!==id)] };
+      const journal = { version: 1, data: next, notes: [changed] };
+      if (session && !session.closed) { if(note.mime==='audio/wav')await session.handle.write(waveHeader(session.bytes),0,44,0);await session.handle.sync();await session.handle.close(); session.closed = true; }
+      const partial=path.join(this.recordings,id,note.audioFile+'.part');
+      if(await exists(partial))await fs.rename(partial,path.join(this.recordings,id,note.audioFile));
+      await atomicJson(path.join(this.root, 'folder-rename.json'), journal); this.folderRenamePending = true;
       this.sessions.delete(id);
-      await this.commitTrashDelete(journal); this.data = next; this.trashDeletePending = false;
+      await this.commitFolderRename(journal); this.data = next; this.folderRenamePending = false;
       return this.snapshot();
     });
   }

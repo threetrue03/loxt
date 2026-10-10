@@ -24,7 +24,7 @@ node landing/scripts/release.mjs
 `landing/release.mjs`의 첫 줄이 기준이다.
 
 ```js
-export const version = '2.7.0';
+export const version = '2.8.0';
 ```
 
 `installer`, `releaseUrl`, `download`가 이 값으로 구성되므로 기본 파일명 규칙을 따르면 다른 URL을 일일이 바꾸지 않는다. 사이트 모든 다운로드 버튼과 릴리스 링크가 이를 사용한다. 앱 버전을 올린 뒤 위 마무리 명령을 실행하면 사이트 버전도 동기화된다.
@@ -58,7 +58,7 @@ cd 'C:\Users\simky\OneDrive\Dokumen\ChatGPT\buzz_interface'
 git status
 git add .
 git diff --cached --stat
-git commit -m "Release v2.7.0: Improve memo navigation and library performance"
+git commit -m "Release v2.8.0: Improve web recovery, mobile documents and installer"
 git push origin main
 ```
 

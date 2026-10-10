@@ -31,6 +31,8 @@ function publish(entry, change) {
 export function memoEntry(id) {
   if (!installed && window.desktop?.memos) {
     installed=true;registerDocumentFlusher('memo',flushMemos);
+    window.addEventListener('loxt:backup-drafts',()=>{for(const entry of entries.values())if(entry.state.dirty)backup(entry);});
+    window.desktop.onConnection?.(({state})=>{if(state==='online')setTimeout(()=>{for(const entry of entries.values())if(entry.state.dirty&&entry.state.errorCode!=='CONFLICT')void saveMemo(entry.id).catch(()=>{});},0);});
     window.desktop.onLibraryChange(event => {
       if(event.kind&&event.kind!=='memo'&&!event.resync)return;
       for(const entry of entries.values())if(!event.id||entry.id===event.id){entry.refreshFailed=false;requestDocumentRefresh(entry,{changes:window.desktop.memos.changes,get:p=>window.desktop.memos.get(p.id)},'blocks',publish,event.documentRevision||Infinity,event.requestId);}
@@ -58,7 +60,7 @@ export function loadMemo(id) {
 }
 export function changeMemo(id, blocks) {
   const entry = memoEntry(id);
-  documentTiming(id,'input',entry.state.revision);publish(entry, { blocks, dirty: true, error: '' });
+  documentTiming(id,'input',entry.state.revision);publish(entry, { blocks, dirty: true, error: '',errorCode:undefined });
   scheduleBackup(entry);
   clearTimeout(entry.timer);
   // Coalesce typing; durable saves checkpoint within 600ms of sustained input.
@@ -79,8 +81,8 @@ export async function saveMemo(id) {
       if (entry.state.dirty) scheduleBackup(entry); else {clearTimeout(entry.backupTimer);localStorage.removeItem(draftKey(id));}
     }
   })();
-  try { await entry.request; publish(entry, { saving: false, error: '' }); }
-  catch (error) { backup(entry); publish(entry, { saving: false, dirty: true, error: error.message }); throw error; }
+  try { await entry.request; publish(entry, { saving: false, error: '',errorCode:undefined }); }
+  catch (error) { backup(entry); publish(entry, { saving: false, dirty: true, error: error.message,errorCode:error.code }); throw error; }
   finally { entry.request = null;if(entry.targetRevision&&!entry.state.dirty)requestDocumentRefresh(entry,{changes:window.desktop.memos.changes,get:p=>window.desktop.memos.get(p.id)},'blocks',publish,entry.targetRevision); }
 }
 export async function flushMemos() { await Promise.all([...entries.keys()].map(saveMemo)); }

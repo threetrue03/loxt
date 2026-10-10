@@ -44,5 +44,6 @@ for (const file of ['yt-dlp.exe', 'version.json']) {
 for await (const chunk of createReadStream(path.join(root, filename))) digest.update(chunk);
 const sha256 = digest.digest('hex');
 await writeFile(path.join(root, 'SHA256SUMS.txt'), `${sha256}  ${filename}\n`);
+await writeFile(path.join(root, filename+'.sha256'), `${sha256}  ${filename}\n`);
 await writeFile(path.join(root, 'release.json'), JSON.stringify({ version: pkg.version, platform: 'win32', arch: 'x64', filename, bytes: (await stat(path.join(root, filename))).size, sha256, python: '3.13.16', updateMethod: 'manual-installer', signed: false }, null, 2));
 console.log(`Installer ${filename}; SHA-256 ${sha256}; production archive checked.`);

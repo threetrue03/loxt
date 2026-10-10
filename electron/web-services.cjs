@@ -26,6 +26,35 @@ function webServices({modelStore,modelPending,libraries,actions,conversions,pref
   if(method==='convert'){if(modelPending?.())throw Error('PC의 모델 작업을 마친 뒤 변환해 주세요.');if(p.workspace!=='work')throw new Error('모바일 신규 변환은 Work에서 사용해 주세요.');const env=await conversions.environment();if(!env.models?.some(m=>m.id===p.model&&m.downloaded))throw new Error('PC에 설치된 모델을 선택해 주세요.');return conversions.enqueue({id:p.id,workspace:'work',model:p.model});}
   if(method==='cancel'){const note=locate(p.id).data.notes.find(n=>n.id===p.id);if(!note)throw new Error('작업을 찾지 못했습니다.');return conversions.cancel(p.id);}
   if(method==='memo.create')return new Memos(store(p.workspace)).create(p.folder||'');
+  if(method==='draft.restore'){
+   if(p.hostId!==context.hostId||!['memo','pdf'].includes(p.kind)||!/^[a-f0-9-]{36}$/.test(p.id||''))throw Error('원래 PC의 초안 사본을 선택해 주세요.');
+   const data=p.data;if(!data||!Number.isSafeInteger(data.revision)||data.revision<0)throw Error('초안 형식을 확인해 주세요.');
+   let source;try{source=locate(p.id);}catch{}
+   const original=source?.data.notes.find(n=>n.id===p.id),mode=source===store('live')?'live':'work',library=store(mode);
+   if(p.kind==='memo'){
+    const blocks=require('./memos.cjs').validateBlocks(data.blocks);
+    const assets=new Map();
+    async function collect(value){if(!value||typeof value!=='object')return;for(const [key,item]of Object.entries(value)){if(key==='url'&&typeof item==='string'&&item.startsWith('loxt-asset:')&&!assets.has(item)){const owner=new URL(item).pathname.slice(1).split('/')[0],memos=new Memos(locate(owner)),asset=await memos.asset(item);if((await fs.stat(asset.filename)).size>32*1024*1024)throw Error('첨부파일 크기를 확인해 주세요. 초안 사본은 보존합니다.');assets.set(item,asset.filename);}else await collect(item);}}
+    await collect(blocks);
+    const memos=new Memos(library),created=await memos.create('');
+    const replacements=new Map();for(const [url,filename]of assets)replacements.set(url,await memos.attach({id:created.note.id,name:new URL(url).pathname.split('/').at(-1),bytes:await fs.readFile(filename)}));
+    function rewrite(value){if(!value||typeof value!=='object')return value;if(Array.isArray(value))return value.map(rewrite);return Object.fromEntries(Object.entries(value).map(([key,item])=>[key,key==='url'&&replacements.has(item)?replacements.get(item):rewrite(item)]));}
+    await memos.save({id:created.note.id,revision:0,blocks:rewrite(blocks)});
+    await library.updateNote(created.note.id,{title:(original?.title||'메모')+' 복구 사본'});
+    return {id:created.note.id,workspace:mode};
+   }
+   require('./pdfs.cjs').validateObjects(data.objects);
+   if(!original||original.kind!=='pdf')throw Error('원본 PDF가 필요합니다. 초안 사본을 보관하고 원래 PC의 문서를 복구한 뒤 다시 시도해 주세요.');
+   const pages=original.documentType==='drawing'?require('./drawing-pages.cjs').validatePages(data.pageIds):null;
+   if(data.objects.some(o=>o.page>(pages?.length||original.pages)))throw Error('초안의 PDF 페이지를 확인해 주세요.');
+   // Validate page ownership before creating the copy, so an invalid local
+   // draft cannot leave an empty document when its later save is rejected.
+   const objects=pages?require('./drawing-pages.cjs').normalizeObjects(data.objects,pages):data.objects;
+   require('./pdfs.cjs').validateObjects(objects);
+   const pdf=new PDFs(library),created=await pdf.import(await fs.readFile(pdf.file(p.id)),original.title+' 복구 사본.pdf','',original.documentType);
+   await pdf.save({id:created.note.id,revision:0,objects,...(pages?{pageIds:pages}:{})});
+   return {id:created.note.id,workspace:mode};
+  }
   if(method==='memo.changes')return new Memos(locate(p.id)).changes(p);
   if(method==='memo.get')return new Memos(locate(p.id)).read(p.id);
   if(method==='memo.save')return new Memos(locate(p.id)).save(p);

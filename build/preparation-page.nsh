@@ -7,20 +7,37 @@
 Function SorinotePreparationCommand
   StrCpy $SorinoteToolsRoot "$INSTDIR\resources"
   StrCpy $SorinotePreparationArgs ""
+  StrCpy $SorinoteLanguage "ko"
+  ${If} $LANGUAGE == 1033
+    StrCpy $SorinoteLanguage "en"
+  ${EndIf}
   ${If} $SorinotePrepareState == ${BST_CHECKED}
     StrCpy $SorinotePreparationArgs '--prepare --runtime "$SorinoteToolsRoot\python-runtime" --device $SorinotePrepareDevice'
   ${EndIf}
+  ${If} $SorinoteAction == "repair"
+    StrCpy $SorinotePreparationArgs "$SorinotePreparationArgs --deep-check"
+  ${EndIf}
   System::Call 'kernel32::GetCurrentProcessId() i.r0'
   StrCpy $SorinoteInstallerPid $0
-  StrCpy $SorinoteCommand '"$SorinoteToolsRoot\python-runtime\python.exe" -u "$SorinoteToolsRoot\python\install_models.py" --root "$SorinoteModelRoot" --models "$SorinoteModels" --parent-pid $SorinoteInstallerPid --installer-log --installer-window $SorinoteInstallPage --installer-result "$SorinoteResultFile" $SorinotePreparationArgs'
+  StrCpy $SorinoteCommand '"$SorinoteToolsRoot\python-runtime\python.exe" -u "$SorinoteToolsRoot\python\install_models.py" --root "$SorinoteModelRoot" --models "$SorinoteModels" --parent-pid $SorinoteInstallerPid --installer-log --installer-window $SorinoteInstallPage --installer-result "$SorinoteResultFile" --language $SorinoteLanguage $SorinotePreparationArgs'
 FunctionEnd
 
 Function SorinotePreparationStart
   Delete "$SorinoteResultFile"
   Delete "$PLUGINSDIR\prepare-result.pid"
+  Delete "$PLUGINSDIR\prepare-result.error.txt"
+  Delete "$PLUGINSDIR\prepare-result.summary.txt"
+  Delete "$PLUGINSDIR\prepare-result.cancel"
   Delete "$SorinoteModelRoot\installer-error.txt"
   StrCpy $SorinotePreparationDone 0
+  StrCpy $SorinotePreparationRunning 1
   StrCpy $SorinotePollCount 0
+  ShowWindow $SorinoteRetryButton ${SW_HIDE}
+  ShowWindow $SorinoteLaterButton ${SW_HIDE}
+  ShowWindow $SorinoteDetailsButton ${SW_HIDE}
+  ShowWindow $SorinoteLogButton ${SW_HIDE}
+  ShowWindow $SorinoteStopButton ${SW_SHOW}
+  EnableWindow $SorinoteStopButton 1
   GetDlgItem $0 $HWNDPARENT 1
   EnableWindow $0 0
   GetDlgItem $0 $HWNDPARENT 3
@@ -46,18 +63,33 @@ Function SorinotePreparationProgressPage
   ${EndIf}
   InitPluginsDir
   StrCpy $SorinoteResultFile "$PLUGINSDIR\prepare-result.txt"
-  !insertmacro MUI_HEADER_TEXT "모델과 변환 환경 준비" "취소하면 준비를 중단합니다. 받은 파일은 다음 준비에서 재사용합니다."
+  !insertmacro MUI_HEADER_TEXT "$(LoxtInstaller053)" "$(LoxtInstaller054)"
   nsDialogs::Create 1018
   Pop $SorinoteInstallPage
-  !insertmacro SorinotePreparationLabel 0 12u "프로그램 파일 설치 완료" 1805
-  !insertmacro SorinotePreparationLabel 22u 14u "선택한 모델 확인 중" 1800
-  !insertmacro SorinotePreparationLabel 40u 32u "모델과 변환 환경을 준비합니다." 1801
-  !insertmacro SorinotePreparationLabel 78u 16u "설치된 모델은 검증 후 재사용합니다." 1802
-  !insertmacro SorinotePreparationLabel 98u 22u "준비 결과를 확인하고 있습니다." 1804
-  ${NSD_CreateProgressBar} 0 124u 100% 10u ""
+  !insertmacro SorinotePreparationLabel 0 12u "$(LoxtInstaller055)" 1805
+  !insertmacro SorinotePreparationLabel 22u 14u "$(LoxtInstaller056)" 1800
+  !insertmacro SorinotePreparationLabel 40u 30u "$(LoxtInstaller057)" 1801
+  !insertmacro SorinotePreparationLabel 72u 16u "$(LoxtInstaller058)" 1802
+  !insertmacro SorinotePreparationLabel 90u 18u "$(LoxtInstaller059)" 1804
+  ${NSD_CreateProgressBar} 0 110u 100% 8u ""
   Pop $0
   System::Call 'user32::SetWindowLongW(p r0, i -12, i 1803)'
   SendMessage $0 0x406 0 100
+  ${NSD_CreateButton} 0 122u 24% 16u "$(LoxtInstaller060)"
+  Pop $SorinoteRetryButton
+  ${NSD_OnClick} $SorinoteRetryButton SorinotePreparationRetry
+  ${NSD_CreateButton} 25% 122u 24% 16u "$(LoxtInstaller061)"
+  Pop $SorinoteLaterButton
+  ${NSD_OnClick} $SorinoteLaterButton SorinotePreparationLater
+  ${NSD_CreateButton} 50% 122u 24% 16u "$(LoxtInstaller062)"
+  Pop $SorinoteDetailsButton
+  ${NSD_OnClick} $SorinoteDetailsButton SorinotePreparationDetails
+  ${NSD_CreateButton} 75% 122u 24% 16u "$(LoxtInstaller063)"
+  Pop $SorinoteLogButton
+  ${NSD_OnClick} $SorinoteLogButton SorinotePreparationLog
+  ${NSD_CreateButton} 75% 122u 24% 16u "$(LoxtInstaller064)"
+  Pop $SorinoteStopButton
+  ${NSD_OnClick} $SorinoteStopButton SorinotePreparationStop
   Call SorinotePreparationStart
   nsDialogs::Show
 FunctionEnd
@@ -70,6 +102,8 @@ Function SorinotePreparationPoll
     ${NSD_KillTimer} SorinotePreparationPoll
     ${If} $SorinoteModelResult == 0
       Call SorinotePreparationFinish
+    ${ElseIf} $SorinoteModelResult == 2
+      Call SorinotePreparationSkipped
     ${Else}
       Call SorinotePreparationFailure
     ${EndIf}
@@ -101,42 +135,131 @@ Function SorinotePreparationPoll
 FunctionEnd
 
 Function SorinotePreparationFailure
-  StrCpy $SorinoteFailureReason "준비 작업이 종료됐습니다. 저장 공간과 설치 로그를 확인해 주세요."
+  StrCpy $SorinotePreparationRunning 0
+  StrCpy $SorinoteFailureReason "$(LoxtInstaller065)"
   ClearErrors
-  FileOpen $0 "$SorinoteModelRoot\installer-error.txt" r
+  FileOpen $0 "$PLUGINSDIR\prepare-result.error.txt" r
   ${IfNot} ${Errors}
     FileReadUTF16LE $0 $SorinoteFailureReason
     FileClose $0
   ${EndIf}
-  MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "변환 준비를 완료하지 못했습니다.$\r$\n$\r$\n$SorinoteFailureReason$\r$\n$\r$\n로그: $SorinoteModelRoot\installer-preparation.log$\r$\n다시 시도하면 받은 파일을 재사용합니다." IDRETRY preparation_retry
-  StrCpy $SorinoteFinishText "앱은 설치했지만 변환 준비는 미완료입니다.$\r$\n모델 보관함에서 모델을 확인하고 변환을 다시 시도하세요."
-  StrCpy $SorinotePreparationDone 1
-  GetDlgItem $0 $HWNDPARENT 1
-  EnableWindow $0 1
+  ClearErrors
+  FileOpen $0 "$PLUGINSDIR\prepare-result.summary.txt" r
+  ${IfNot} ${Errors}
+    FileReadUTF16LE $0 $1
+    FileClose $0
+    GetDlgItem $0 $SorinoteInstallPage 1801
+    SendMessage $0 ${WM_SETTEXT} 0 "STR:$1"
+  ${EndIf}
+  GetDlgItem $0 $SorinoteInstallPage 1800
+  SendMessage $0 ${WM_SETTEXT} 0 "STR:$(LoxtInstaller066)"
+  GetDlgItem $0 $SorinoteInstallPage 1804
+  SendMessage $0 ${WM_SETTEXT} 0 "STR:$(LoxtInstaller067)"
+  GetDlgItem $0 $SorinoteInstallPage 1803
+  SendMessage $0 0x40A 0 0
+  ShowWindow $SorinoteStopButton ${SW_HIDE}
+  ShowWindow $SorinoteRetryButton ${SW_SHOW}
+  ShowWindow $SorinoteLaterButton ${SW_SHOW}
+  ShowWindow $SorinoteDetailsButton ${SW_SHOW}
+  ShowWindow $SorinoteLogButton ${SW_SHOW}
   Return
-  preparation_retry:
+FunctionEnd
+
+Function SorinotePreparationRetry
+  Pop $0
   Call SorinotePreparationStart
 FunctionEnd
 
-Function SorinotePreparationFinish
+Function SorinotePreparationLater
+  Pop $0
+  Call SorinotePreparationSkipped
+FunctionEnd
+
+Function SorinotePreparationSkipped
+  StrCpy $SorinotePreparationRunning 0
+  StrCpy $SorinoteFinishText "$(LoxtInstaller068)"
   StrCpy $SorinotePreparationDone 1
-  StrCpy $SorinoteFinishText "선택한 모델 설치를 완료했습니다.$\r$\n앱에서 사용할 모델을 선택할 수 있습니다."
+  GetDlgItem $0 $SorinoteInstallPage 1800
+  SendMessage $0 ${WM_SETTEXT} 0 "STR:$(LoxtInstaller069)"
+  ShowWindow $SorinoteStopButton ${SW_HIDE}
+  ShowWindow $SorinoteRetryButton ${SW_HIDE}
+  ShowWindow $SorinoteLaterButton ${SW_HIDE}
+  GetDlgItem $0 $HWNDPARENT 1
+  EnableWindow $0 1
+FunctionEnd
+
+Function SorinotePreparationDetails
+  Pop $0
+  MessageBox MB_OK|MB_ICONEXCLAMATION "$SorinoteFailureReason"
+FunctionEnd
+
+Function SorinotePreparationLog
+  Pop $0
+  ${If} ${FileExists} "$PLUGINSDIR\prepare-result.log"
+    StrCpy $R0 "$PLUGINSDIR\prepare-result.log"
+  ${ElseIf} ${FileExists} "$SorinoteModelRoot\installer-preparation.log"
+    StrCpy $R0 "$SorinoteModelRoot\installer-preparation.log"
+  ${Else}
+    MessageBox MB_OK "$(LoxtInstaller070)"
+    Return
+  ${EndIf}
+  MessageBox MB_YESNO|MB_ICONQUESTION "$(LoxtLogActions)" IDYES preparation_open_log
+  StrLen $0 $R0
+  IntOp $0 $0 + 1
+  IntOp $0 $0 * 2
+  System::Call 'kernel32::GlobalAlloc(i 0x42, i r0) p.r1'
+  ${If} $1 == 0
+    Return
+  ${EndIf}
+  System::Call 'kernel32::GlobalLock(p r1) p.r2'
+  System::Call 'kernel32::lstrcpyW(p r2, w "$R0")'
+  System::Call 'kernel32::GlobalUnlock(p r1)'
+  System::Call 'user32::OpenClipboard(p $HWNDPARENT) i.r0'
+  ${If} $0 != 0
+    System::Call 'user32::EmptyClipboard()'
+    System::Call 'user32::SetClipboardData(i 13, p r1) p.r0'
+    System::Call 'user32::CloseClipboard()'
+    ${If} $0 != 0
+      Return
+    ${EndIf}
+  ${EndIf}
+  System::Call 'kernel32::GlobalFree(p r1)'
+  Return
+  preparation_open_log:
+  ExecShell "open" "$R0"
+FunctionEnd
+
+Function SorinotePreparationStop
+  Pop $0
+  FileOpen $0 "$PLUGINSDIR\prepare-result.cancel" w
+  FileWrite $0 "cancel"
+  FileClose $0
+  EnableWindow $SorinoteStopButton 0
+  GetDlgItem $0 $SorinoteInstallPage 1804
+  SendMessage $0 ${WM_SETTEXT} 0 "STR:$(LoxtInstaller071)"
+FunctionEnd
+
+Function SorinotePreparationFinish
+  StrCpy $SorinotePreparationRunning 0
+  ShowWindow $SorinoteStopButton ${SW_HIDE}
+  StrCpy $SorinotePreparationDone 1
+  StrCpy $SorinoteFinishText "$(LoxtInstaller072)"
   ${If} $SorinotePrepareState == ${BST_CHECKED}
-    StrCpy $SorinoteFinishText "선택한 모델의 변환 준비와 실제 실행 검사를 완료했습니다.$\r$\n기존 모델 선택은 유지합니다. 앱에서 사용할 모델을 확인하세요."
+    StrCpy $SorinoteFinishText "$(LoxtInstaller073)"
   ${EndIf}
   ${If} $SorinoteAction == "update"
-    StrCpy $SorinoteFinishText "LOXT 업데이트와 선택한 모델 설치를 완료했습니다.$\r$\n기존 녹음·스크립트·설정·모델은 유지했습니다."
+    StrCpy $SorinoteFinishText "$(LoxtInstaller074)"
     ${If} $SorinotePrepareState == ${BST_CHECKED}
-      StrCpy $SorinoteFinishText "LOXT 업데이트와 변환 환경 실행 검사를 완료했습니다.$\r$\n기존 녹음·스크립트·설정·모델은 유지했습니다."
+      StrCpy $SorinoteFinishText "$(LoxtInstaller075)"
     ${EndIf}
   ${ElseIf} $SorinoteAction == "repair"
-    StrCpy $SorinoteFinishText "LOXT 앱 복구와 선택한 모델 설치를 완료했습니다.$\r$\n기존 녹음·스크립트·설정·모델은 유지했습니다."
+    StrCpy $SorinoteFinishText "$(LoxtInstaller076)"
     ${If} $SorinotePrepareState == ${BST_CHECKED}
-      StrCpy $SorinoteFinishText "LOXT 앱 복구와 변환 환경 실행 검사를 완료했습니다.$\r$\n기존 녹음·스크립트·설정·모델은 유지했습니다."
+      StrCpy $SorinoteFinishText "$(LoxtInstaller077)"
     ${EndIf}
   ${EndIf}
   GetDlgItem $0 $SorinoteInstallPage 1800
-  SendMessage $0 ${WM_SETTEXT} 0 "STR:준비 완료"
+  SendMessage $0 ${WM_SETTEXT} 0 "STR:$(LoxtInstaller078)"
   GetDlgItem $0 $HWNDPARENT 1
   EnableWindow $0 1
 FunctionEnd

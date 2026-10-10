@@ -8,6 +8,7 @@ import msvcrt
 import os
 from pathlib import Path
 import re
+import shutil
 import threading
 import time
 import urllib.request
@@ -39,6 +40,14 @@ def fetch_json(url):
         return json.load(response)
 
 
+def ensure_space(root, required, reserve=64 * 1024 * 1024):
+    """Check the actual target volume, before preallocating a partial file."""
+    free = shutil.disk_usage(root).free
+    emit('space', path=str(root), required=required + reserve, free=free)
+    if free < required + reserve:
+        raise OSError(28, f'저장 공간이 부족합니다: {root} · 필요 {(required + reserve) / 1e6:,.0f} MB / 여유 {free / 1e6:,.0f} MB')
+
+
 def download(url, filename, size, checksum, phase="installing", message="GPU 라이브러리 다운로드 중"):
     if filename.is_file() and filename.stat().st_size == size and sha256(filename) == checksum:
         emit("download", name=filename.name, current=size, total=size, unit="B")
@@ -54,6 +63,7 @@ def download(url, filename, size, checksum, phase="installing", message="GPU 라
     except (OSError, ValueError, KeyError):
         pass
     if not completed:
+        ensure_space(filename.parent, size)
         with partial.open("wb") as target:
             target.truncate(size)
     lock = threading.Lock()
@@ -86,7 +96,12 @@ def download(url, filename, size, checksum, phase="installing", message="GPU 라
                 return
             except Exception as error:
                 failure = error
-                time.sleep(min(5, attempt + 1))
+                if isinstance(error, OSError) and error.errno in [13, 28]:
+                    raise
+                if attempt < 4:
+                    delay = attempt + 1
+                    emit('retry', name=filename.name, attempt=attempt + 2, maximum=5, seconds=delay, message=str(error))
+                    time.sleep(delay)
         raise failure
 
     emit("phase", phase=phase, message=message)
@@ -121,11 +136,15 @@ def model_lock(root):
         handle.seek(0, os.SEEK_END)
         if handle.tell() == 0:
             handle.write(b"\0"); handle.flush()
+        waiting = False
         while True:
             try:
                 handle.seek(0); msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
                 break
             except OSError:
+                if not waiting:
+                    emit('phase', phase='waiting', message='다른 모델·환경 준비 작업이 끝나기를 기다리는 중')
+                    waiting = True
                 time.sleep(1)
         try:
             yield
@@ -134,38 +153,12 @@ def model_lock(root):
 
 
 def model(root, name="medium"):
-    root.mkdir(parents=True, exist_ok=True)
-    with model_lock(root):
-        model_files(root, name)
+    from installer_models import install
+    install(root, name)
 
 
 def model_files(root, name):
-    repo = MODELS[name]
-    metadata = fetch_json(f"https://huggingface.co/api/models/{repo}?blobs=true")
-    revision = metadata["sha"]
-    if not re.fullmatch(r"[0-9a-f]{40}", revision):
-        raise RuntimeError("공식 모델 버전을 확인하지 못했습니다.")
-    required = {"config.json", "tokenizer.json", "model.bin"}
-    allowed = required | {"vocabulary.txt", "vocabulary.json", "preprocessor_config.json"}
-    files = {item["rfilename"]: item for item in metadata["siblings"] if item["rfilename"] in allowed}
-    if not required.issubset(files):
-        raise RuntimeError("공식 모델의 필수 파일을 확인하지 못했습니다.")
-    for filename in sorted(files, key=lambda value: value == "model.bin"):
-        item = files[filename]
-        url = f"https://huggingface.co/{repo}/resolve/{revision}/{filename}"
-        target = root / filename
-        if filename == "model.bin":
-            download(url, target, item["lfs"]["size"], item["lfs"]["sha256"],
-                     phase="downloading", message=f"{name} 모델 다운로드 중")
-        else:
-            with urllib.request.urlopen(url, timeout=30) as response:
-                content = response.read(5 * 1024 * 1024)
-            digest = hashlib.sha1(f"blob {len(content)}\0".encode() + content).hexdigest()
-            if digest != item["blobId"]:
-                raise RuntimeError("모델 설정 파일의 무결성 검사가 실패했습니다.")
-            temporary = target.with_name(filename + ".tmp")
-            temporary.write_bytes(content); os.replace(temporary, target)
-    emit("model", revision=revision)
+    model(root, name)
 
 
 if __name__ == "__main__":

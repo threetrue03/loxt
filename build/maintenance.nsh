@@ -161,22 +161,22 @@ Function SorinoteGuard
     ${EndIf}
   ${EndIf}
   ${If} $SorinoteAction == "update"
-    StrCpy $SorinoteFinishTitle "LOXT 업데이트 완료"
-    StrCpy $SorinoteFinishText "LOXT 업데이트를 완료했습니다.$\r$\n기존 녹음·스크립트·설정·모델은 유지했습니다."
+    StrCpy $SorinoteFinishTitle "$(LoxtInstaller079)"
+    StrCpy $SorinoteFinishText "$(LoxtInstaller080)"
   ${ElseIf} $SorinoteAction == "repair"
-    StrCpy $SorinoteFinishTitle "LOXT 복구 완료"
-    StrCpy $SorinoteFinishText "LOXT 앱 복구를 완료했습니다.$\r$\n기존 녹음·스크립트·설정·모델은 유지했습니다."
+    StrCpy $SorinoteFinishTitle "$(LoxtInstaller081)"
+    StrCpy $SorinoteFinishText "$(LoxtInstaller082)"
   ${EndIf}
   Return
   maintenance_invalid:
-  MessageBox MB_OK|MB_ICONEXCLAMATION "이 설치 프로그램으로 앱을 복구할 수 없습니다. 현재 앱과 같거나 더 최신 버전의 설치 프로그램을 사용하세요. 앱 삭제는 설치 관리 화면에서 선택할 수 있습니다." /SD IDOK
+  MessageBox MB_OK|MB_ICONEXCLAMATION "$(LoxtInstaller083)" /SD IDOK
   SetErrorLevel 3
   Quit
 FunctionEnd
 
 Function SorinoteDeleteApp
   ${IfNot} ${Silent}
-    MessageBox MB_YESNO|MB_ICONEXCLAMATION|MB_DEFBUTTON2 "LOXT 앱과 다운로드한 모델, 변환 환경을 삭제할까요?$\r$\n녹음과 스크립트는 보존됩니다." IDYES delete_confirmed
+    MessageBox MB_YESNO|MB_ICONEXCLAMATION|MB_DEFBUTTON2 "$(LoxtInstaller084)" IDYES delete_confirmed
     SetErrorLevel 1
     Quit
   ${EndIf}
@@ -186,7 +186,7 @@ Function SorinoteDeleteApp
     StrCpy $SorinoteUninstaller "$SorinoteInstalledDir\Uninstall Sorinote.exe"
   ${EndIf}
   ${IfNot} ${FileExists} "$SorinoteUninstaller"
-    MessageBox MB_OK|MB_ICONSTOP "설치된 제거 프로그램을 찾지 못했습니다. 앱 복구 후 다시 삭제해 주세요." /SD IDOK
+    MessageBox MB_OK|MB_ICONSTOP "$(LoxtInstaller085)" /SD IDOK
     SetErrorLevel 2
     Quit
   ${EndIf}
@@ -196,7 +196,7 @@ Function SorinoteDeleteApp
   ${OrIf} $0 != 0
   ${OrIf} ${FileExists} "$SorinoteInstalledDir\Sorinote.exe"
   ${OrIf} ${FileExists} "$SorinoteInstalledDir\LOXT.exe"
-    MessageBox MB_OK|MB_ICONSTOP "앱 삭제를 완료하지 못했습니다. 실행 중인 LOXT를 종료한 뒤 다시 시도해 주세요." /SD IDOK
+    MessageBox MB_OK|MB_ICONSTOP "$(LoxtInstaller086)" /SD IDOK
     SetErrorLevel 2
     Quit
   ${EndIf}
@@ -206,7 +206,7 @@ Function SorinoteDeleteApp
   RMDir "$SorinoteInstalledDir"
   SetErrorLevel 0
   ${IfNot} ${Silent}
-    MessageBox MB_OK "앱과 모델, 변환 환경을 삭제했습니다. 녹음과 스크립트는 보존했습니다."
+    MessageBox MB_OK "$(LoxtInstaller087)"
   ${EndIf}
   Quit
 FunctionEnd
@@ -233,40 +233,40 @@ Function SorinoteMaintenancePage
     Abort
   ${EndIf}
   ${If} $SorinoteVersionState == "older"
-    !insertmacro MUI_HEADER_TEXT "LOXT 업데이트" "새 버전으로 업데이트하거나 앱과 모델을 삭제할 수 있습니다."
+    !insertmacro MUI_HEADER_TEXT "$(LoxtInstaller033)" "$(LoxtInstaller088)"
   ${Else}
-    !insertmacro MUI_HEADER_TEXT "LOXT 설치 관리" "앱을 관리하거나 앱과 모델을 삭제할 수 있습니다."
+    !insertmacro MUI_HEADER_TEXT "$(LoxtInstaller089)" "$(LoxtInstaller090)"
   ${EndIf}
   nsDialogs::Create 1018
   Pop $0
   StrCpy $1 $SorinoteInstalledVersion
   ${If} $1 == ""
-    StrCpy $1 "버전 확인 불가"
+    StrCpy $1 "$(LoxtInstaller091)"
   ${EndIf}
-  ${NSD_CreateLabel} 0 0 100% 18u "설치된 앱: $1 · 설치 프로그램: ${VERSION}"
+  ${NSD_CreateLabel} 0 0 100% 18u "$(LoxtInstaller092)"
   Pop $0
   StrCpy $SorinoteChoiceRepair 0
   ${If} $SorinoteVersionState == "older"
-    ${NSD_CreateLabel} 0 24u 100% 24u "새 버전으로 업데이트합니다. 기존 녹음·스크립트·설정·모델은 유지하고 필요한 변환 환경을 확인합니다."
+    ${NSD_CreateLabel} 0 24u 100% 24u "$(LoxtInstaller093)"
     Pop $0
-    ${NSD_CreateRadioButton} 0 55u 100% 14u "업데이트"
+    ${NSD_CreateRadioButton} 0 55u 100% 14u "$(LoxtInstaller094)"
     Pop $SorinoteChoiceRepair
   ${ElseIf} $SorinoteVersionState == "same"
-    ${NSD_CreateLabel} 0 24u 100% 24u "복구하면 앱과 변환 환경을 다시 준비합니다. 녹음·스크립트와 설치된 모델은 유지합니다."
+    ${NSD_CreateLabel} 0 24u 100% 24u "$(LoxtInstaller095)"
     Pop $0
-    ${NSD_CreateRadioButton} 0 55u 100% 14u "앱 복구"
+    ${NSD_CreateRadioButton} 0 55u 100% 14u "$(LoxtInstaller096)"
     Pop $SorinoteChoiceRepair
   ${Else}
-    ${NSD_CreateLabel} 0 24u 100% 36u "현재 앱과 같거나 더 최신 버전의 설치 프로그램을 사용하세요. 이 설치 프로그램에서는 앱 삭제만 가능합니다."
+    ${NSD_CreateLabel} 0 24u 100% 36u "$(LoxtInstaller097)"
     Pop $0
   ${EndIf}
-  ${NSD_CreateRadioButton} 0 80u 100% 14u "앱 삭제 · 다운로드한 모델과 변환 환경 함께 삭제"
+  ${NSD_CreateRadioButton} 0 80u 100% 14u "$(LoxtInstaller098)"
   Pop $SorinoteChoiceDelete
   ${If} $SorinoteChoiceRepair == 0
-    ${NSD_CreateLabel} 0 104u 100% 30u "복구에는 현재 앱과 같거나 더 최신 버전의 설치 프로그램이 필요합니다. 앱 삭제 시에도 녹음과 스크립트는 보존됩니다."
+    ${NSD_CreateLabel} 0 104u 100% 30u "$(LoxtInstaller099)"
   ${Else}
     ${NSD_SetState} $SorinoteChoiceRepair ${BST_CHECKED}
-    ${NSD_CreateLabel} 0 104u 100% 30u "앱 삭제 시 모델과 변환 엔진도 삭제합니다. 녹음과 스크립트는 보존됩니다."
+    ${NSD_CreateLabel} 0 104u 100% 30u "$(LoxtInstaller100)"
   ${EndIf}
   Pop $0
   nsDialogs::Show
@@ -284,7 +284,7 @@ Function SorinoteMaintenanceLeave
     ${NSD_GetState} $SorinoteChoiceRepair $0
   ${EndIf}
   ${If} $0 != ${BST_CHECKED}
-    MessageBox MB_OK|MB_ICONEXCLAMATION "복구하려면 최신 설치 프로그램을 사용하세요. 삭제하려면 앱 삭제를 선택하세요."
+    MessageBox MB_OK|MB_ICONEXCLAMATION "$(LoxtInstaller101)"
     Abort
   ${EndIf}
   StrCpy $SorinoteAction "repair"
